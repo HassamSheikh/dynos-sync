@@ -14,20 +14,22 @@ class DriftLocalStore implements LocalStore {
 
   @override
   Future<void> upsert(String table, String id, Map<String, dynamic> data) async {
-    final columns = data.keys.toList();
+    final columns = data.keys.map((c) => '"${c.replaceAll('"', '""')}"').toList();
+    final safeTable = '"${table.replaceAll('"', '""')}"';
     final placeholders = List.filled(columns.length, '?').join(', ');
     final values = data.values.toList();
 
     await _db.customStatement(
-      'INSERT OR REPLACE INTO $table (${columns.join(', ')}) VALUES ($placeholders)',
+      'INSERT OR REPLACE INTO $safeTable (${columns.join(', ')}) VALUES ($placeholders)',
       values,
     );
   }
 
   @override
   Future<void> delete(String table, String id) async {
+    final safeTable = '"${table.replaceAll('"', '""')}"';
     await _db.customStatement(
-      'DELETE FROM $table WHERE id = ?',
+      'DELETE FROM $safeTable WHERE id = ?',
       [id],
     );
   }

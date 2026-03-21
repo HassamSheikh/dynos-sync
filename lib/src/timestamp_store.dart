@@ -10,7 +10,11 @@ abstract class TimestampStore {
   Future<void> set(String table, DateTime timestamp);
 }
 
-/// In-memory timestamp store. Useful for testing.
+/// In-memory timestamp store.
+///
+/// **WARNING:** Do not use this in production! It resets on app launch,
+/// which will cause a full data pull (`pullSince` from epoch) every time.
+/// Use [DriftTimestampStore] or implement your own persistent store.
 class InMemoryTimestampStore implements TimestampStore {
   final _timestamps = <String, DateTime>{};
 

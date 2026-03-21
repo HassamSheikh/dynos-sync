@@ -166,6 +166,11 @@ class SyncEngine {
       for (final row in rows) {
         final id = row['id']?.toString();
         if (id == null) continue;
+
+        // Skip overwriting local data if there is a pending user edit.
+        final isPending = await queue.hasPending(table, id);
+        if (isPending) continue;
+
         await local.upsert(table, id, row);
       }
       await timestamps.set(table, DateTime.now().toUtc());

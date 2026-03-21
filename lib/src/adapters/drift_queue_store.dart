@@ -40,6 +40,16 @@ class DriftQueueStore implements QueueStore {
   }
 
   @override
+  Future<bool> hasPending(String table, String id) async {
+    final rows = await _db.customSelect(
+      'SELECT COUNT(1) AS c FROM dynos_sync_queue '
+      'WHERE table_name = ? AND record_id = ? AND synced_at IS NULL',
+      variables: [Variable.withString(table), Variable.withString(id)],
+    ).get();
+    return rows.first.read<int>('c') > 0;
+  }
+
+  @override
   Future<void> markSynced(String id) async {
     await _db.customStatement(
       'UPDATE dynos_sync_queue SET synced_at = ? WHERE id = ?',

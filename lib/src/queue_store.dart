@@ -12,6 +12,9 @@ abstract class QueueStore {
   /// Get pending (un-synced) entries, oldest first.
   Future<List<SyncEntry>> getPending({int limit = 50});
 
+  /// Check if a specific record has a pending sync entry.
+  Future<bool> hasPending(String table, String id);
+
   /// Mark an entry as successfully synced.
   Future<void> markSynced(String id);
 
