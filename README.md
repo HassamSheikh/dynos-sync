@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="dynos.fit logo" width="320px">
+</p>
+
 # 🛡️ dynos_sync
 
 **High-Reliability, Production-Hardened Sync Engine for Dart & Flutter.**  

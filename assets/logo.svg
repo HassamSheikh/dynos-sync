@@ -1,0 +1,7 @@
+<svg width="400" height="100" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="100" fill="#0A0A0A"/>
+  <rect x="32" y="22" width="12" height="56" rx="3" fill="#CCFF00"/>
+  <rect x="50" y="10" width="12" height="80" rx="3" fill="#CCFF00"/>
+  <rect x="68" y="30" width="12" height="42" rx="3" fill="#CCFF00" opacity="0.55"/>
+  <text x="100" y="64" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="46" font-weight="500" letter-spacing="8" fill="#FFFFFF">dynos</text>
+</svg>
