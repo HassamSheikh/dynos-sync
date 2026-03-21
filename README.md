@@ -150,6 +150,20 @@ The `dynos_sync` engine has been subjected to a rigorous **42-point security aud
 
 ---
 
+## 🏛️ Licensing & Pricing
+
+`dynos_sync` is a **Source Available** project under the **Business Source License (BSL-1.1)**. 
+
+| Tier | Usage | Cost |
+| :--- | :--- | :--- |
+| **Community** | Personal, non-production, testing, or startups / entities with <$5M ARR/Funding. | **Free** |
+| **Enterprise** | Commercial production use by any entity with >$5M ARR/Funding. | **Contact Maintainer** |
+| **Future OS** | After 4 years (March 2028), each version automatically becomes Apache 2.0. | **Free & Open** |
+
+*For commercial license inquiries or support agreements, please open a private security issue or contact the official repository maintainer.*
+
+---
+
 ## 🤝 Contributing & Community
 
 `dynos_sync` is built by the community for the community. If you find a security gap, please open a **Vulnerability Report** in the Issues tab.
