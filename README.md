@@ -126,7 +126,7 @@ For deep-dives into the engine's internals and security protocols:
 | :--- | :--- | :--- |
 | **Community** | Personal, non-production, testing, or startups / entities with <$5M ARR/Funding. | **Free** |
 | **Enterprise** | Commercial production use by any entity with >$5M ARR/Funding. | **Contact Maintainer** |
-| **Future OS** | After 4 years (March 2028), each version automatically becomes Apache 2.0. | **Free & Open** |
+| **Future OS** | After 2 years (March 2028), each version automatically becomes Apache 2.0. | **Free & Open** |
 
 ---
 
