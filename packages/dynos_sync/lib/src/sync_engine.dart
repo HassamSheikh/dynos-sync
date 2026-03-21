@@ -123,9 +123,15 @@ class SyncEngine {
       final pulls = <Future<void>>[];
       for (final table in tables) {
         final remoteTime = remoteTs[table];
-        if (remoteTime == null) continue;
-
         final localTime = await timestamps.get(table);
+
+        if (remoteTime == null) {
+          // No remote timestamp info — pull with last known local timestamp
+          // (epoch if never synced). Ensures sync works without a sync_status table.
+          pulls.add(_pullTable(table, localTime));
+          continue;
+        }
+
         if (remoteTime.isAfter(localTime)) {
           pulls.add(_pullTable(table, localTime));
         }

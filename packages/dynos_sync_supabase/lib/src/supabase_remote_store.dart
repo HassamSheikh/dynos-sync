@@ -21,7 +21,8 @@ class SupabaseRemoteStore implements RemoteStore {
   /// Creates a Supabase remote store.
   ///
   /// - [client]: Your Supabase client instance.
-  /// - [userId]: The authenticated user's ID (used for sync_status lookup).
+  /// - [userId]: Callback that returns the current authenticated user's ID.
+  ///   Called on every sync cycle so it stays fresh across sign-out/sign-in.
   /// - [syncStatusTable]: Name of the sync status table (default: `sync_status`).
   /// - [tableTimestampKeys]: Maps table names to their `sync_status` column names.
   ///   Example: `{'users': 'users_at', 'tasks': 'tasks_at'}`.
@@ -34,7 +35,9 @@ class SupabaseRemoteStore implements RemoteStore {
   });
 
   final SupabaseClient client;
-  final String userId;
+  /// Returns the current user ID. Called per sync cycle to handle
+  /// session expiry and account switches.
+  final String Function() userId;
   final String syncStatusTable;
 
   /// Maps table names to their corresponding column in [syncStatusTable].
@@ -75,7 +78,7 @@ class SupabaseRemoteStore implements RemoteStore {
       final rows = await client
           .from(syncStatusTable)
           .select()
-          .eq('user_id', userId);
+          .eq('user_id', userId());
 
       if (rows.isEmpty) return {};
 
