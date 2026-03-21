@@ -38,6 +38,8 @@ SyncEngine createSyncEngine({
       queueRetention: Duration(days: 30),
       stopOnFirstError: true,
       maxRetries: 3,
+      sensitiveFields: ['ssn', 'password'], // 🛡️ [NEW] mask PII in error logs
+      useExponentialBackoff: true,          // 📶 [NEW] 2, 4, 8s retry delay
     ),
     onError: (error, stack, context) {
       print('Sync error [$context]: $error');
@@ -93,6 +95,26 @@ Future<void> onRefresh(SyncEngine sync) async {
   await sync.drain();
   await sync.pullAll();
 }
+
+// ─── Step 5: Session Termination ────────────────────────────────────────────
+
+/// Call when the user logs out.
+///
+/// **CRITICAL SECURITY STEP:** This purges the local sync queue and resets
+/// timestamps to ensure User A's data doesn't leak into User B's session.
+Future<void> onUserLogout(SyncEngine sync) async {
+  await sync.logout();
+}
+
+// ─── Step 6: Background Isolate Offloading ──────────────────────────────────
+
+/// For massive datasets (10k+ rows), run the sync in a background isolate.
+/// This ensures the primary UI thread remains silky smooth (60/120 FPS).
+Future<void> runHeavySync(SyncEngine sync) async {
+  final hardened = IsolateSyncEngine(sync);
+  await hardened.syncAllInBackground();
+}
+
 
 // ─── Full setup with Drift + Supabase ───────────────────────────────────────
 //

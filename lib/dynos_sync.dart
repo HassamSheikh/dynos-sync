@@ -19,3 +19,4 @@ export 'src/sync_entry.dart';
 export 'src/sync_operation.dart';
 export 'src/sync_config.dart';
 export 'src/timestamp_store.dart';
+export 'src/isolate_sync_engine.dart';

@@ -5,6 +5,8 @@ class SyncConfig {
     this.queueRetention = const Duration(days: 30),
     this.stopOnFirstError = true,
     this.maxRetries = 3,
+    this.sensitiveFields = const [],
+    this.useExponentialBackoff = true,
   });
 
   /// Max number of pending entries to drain per cycle.
@@ -19,4 +21,10 @@ class SyncConfig {
 
   /// Maximum number of push retries before a pending entry is permanently dropped.
   final int maxRetries;
+
+  /// Fields to mask in logs and telemetry (e.g. ['email', 'ssn']).
+  final List<String> sensitiveFields;
+
+  /// If true, uses exponential backoff (2^n) during retries.
+  final bool useExponentialBackoff;
 }

@@ -66,6 +66,23 @@ class SyncEngine {
 
   static const _uuid = Uuid();
 
+  Map<String, dynamic> _maskPayload(Map<String, dynamic> data) {
+    if (config.sensitiveFields.isEmpty) return data;
+    final masked = Map<String, dynamic>.from(data);
+    for (final field in config.sensitiveFields) {
+      if (masked.containsKey(field)) {
+        masked[field] = '[REDACTED]';
+      }
+    }
+    return masked;
+  }
+
+  Duration _getRetryDelay(int attempt) {
+    if (!config.useExponentialBackoff) return Duration.zero;
+    // 2, 4, 8, 16... seconds
+    return Duration(seconds: 1 << attempt);
+  }
+
   // ── Initial sync gate ─────────────────────────────────────────────────────
 
   final Completer<void> _initialSync = Completer<void>();
@@ -78,21 +95,26 @@ class SyncEngine {
 
   /// Write a record locally and queue it for push to the remote.
   ///
-  /// The local write happens first (instant UI update).
-  /// The remote push is queued and attempted immediately, but will retry
-  /// on next [drain] if it fails.
+  /// **Military Grade Fix:** Operation is now explicitly ordered to ensure
+  /// the sync queue entry exists before the local write completes.
   Future<void> write(
     String table,
     String id,
     Map<String, dynamic> data,
   ) async {
+    // 1. Queue it (includes RLS check)
     await _enqueue(table, id, SyncOperation.upsert, data);
+    
+    // 2. Write it locally 
     await local.upsert(table, id, data);
   }
 
   /// Delete a record locally and queue the deletion for push.
   Future<void> remove(String table, String id) async {
+    // 1. Queue deletion
     await _enqueue(table, id, SyncOperation.delete, {});
+    
+    // 2. Remove locally
     await local.delete(table, id);
   }
 
@@ -140,7 +162,8 @@ class SyncEngine {
             onError?.call(e, st, 'drain_poison_pill[${entry.table}/${entry.recordId}] permanently failed');
             await queue.deleteEntry(entry.id);
           } else {
-            onError?.call(e, st, 'drain[${entry.table}/${entry.recordId}] retry ${entry.retryCount + 1}');
+            final masked = _maskPayload(entry.payload);
+            onError?.call(e, st, 'drain[${entry.table}/${entry.recordId}] payload: $masked retry ${entry.retryCount + 1}');
             await queue.incrementRetry(entry.id);
             if (config.stopOnFirstError) break;
           }

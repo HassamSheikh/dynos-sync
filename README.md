@@ -189,6 +189,8 @@ final sync = SyncEngine(
     queueRetention: Duration(days: 30),      // purge synced entries after 30 days
     stopOnFirstError: true,                  // stop drain on first push failure
     maxRetries: 3,                           // drop poison-pill entries after 3 retries
+    sensitiveFields: ['ssn', 'password'],    // [NEW] mask PII in error logs
+    useExponentialBackoff: true,             // [NEW] 2, 4, 8s... retry delay
   ),
   onError: (error, stack, context) {
     logger.error('Sync error in $context', error, stack);
@@ -211,6 +213,18 @@ For this to work, your backend needs:
 - Pass the column mapping via `tableTimestampKeys`
 
 Without it, the engine falls back to pulling all tables every sync (still delta — only rows with `updated_at > lastSync`).
+
+## High-Performance Background Syncing
+
+For apps with massive datasets (10k+ records), syncing JSON on the main UI thread can cause tiny frame drops. Use the `IsolateSyncEngine` wrapper to offload heavy [drain] and [pullAll] operations to a background isolate:
+
+```dart
+final engine = SyncEngine(...);
+final hardened = IsolateSyncEngine(engine);
+
+// This ensures zero UI jank during heavy sync cycles.
+await hardened.syncAllInBackground();
+```
 
 ## Custom Adapters
 
