@@ -2,18 +2,25 @@ name: Release Drafter
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    types: [opened, reopened, synchronize]
+    # branches to consider pushing for title/tag/release etc.
+    branches:
+      - master
+  # pull_request_target is recommended for Forks to have GITHUB_TOKEN write access for labelling
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
+      # (Optional) Checkout if you need specific logic, but release-drafter doesn't strictly need it for labels
       - uses: release-drafter/release-drafter@v5
+        with:
+          # config-name: .github/release-drafter.yml # Optional, defaults to this
+          disable-autolabeler: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
