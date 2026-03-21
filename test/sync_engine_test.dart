@@ -25,6 +25,12 @@ class BadRemoteStore implements RemoteStore {
   }
   
   @override
+  Future<void> pushBatch(List<SyncEntry> entries) async {
+    // Force a failure to test the fallback logic
+    throw Exception('Simulated Batch Failure');
+  }
+  
+  @override
   Future<List<Map<String, dynamic>>> pullSince(String table, DateTime since) async => [];
   
   @override

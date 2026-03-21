@@ -1,4 +1,5 @@
 import 'sync_operation.dart';
+import 'sync_entry.dart';
 
 /// Interface for the remote backend (Supabase, Firebase, custom REST, etc.).
 ///
@@ -11,6 +12,9 @@ abstract class RemoteStore {
     SyncOperation operation,
     Map<String, dynamic> data,
   );
+
+  /// Push multiple records to the remote in optimized batches.
+  Future<void> pushBatch(List<SyncEntry> entries);
 
   /// Pull all records from [table] updated after [since].
   ///
