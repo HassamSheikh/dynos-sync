@@ -169,13 +169,18 @@ class SyncEngine {
   Future<void> _pullTable(String table, DateTime since) async {
     try {
       final rows = await remote.pullSince(table, since);
+      if (rows.isEmpty) return;
+
+      // Batch-fetch all IDs for un-synced local records for this table.
+      // This prevents the N+1 query problem during the ensuing row processing.
+      final pendingIds = await queue.getPendingIds(table);
+
       for (final row in rows) {
         final id = row['id']?.toString();
         if (id == null) continue;
 
         // Skip overwriting local data if there is a pending user edit.
-        final isPending = await queue.hasPending(table, id);
-        if (isPending) continue;
+        if (pendingIds.contains(id)) continue;
 
         await local.upsert(table, id, row);
       }

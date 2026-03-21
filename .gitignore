@@ -1,0 +1,18 @@
+# Dart/Flutter ignore
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+pubspec.lock
+
+# IDE ignore
+.idea/
+.vscode/
+*.iml
+*.swp
+*.pdm
+
+# OS ignore
+.DS_Store
+Thumbs.db

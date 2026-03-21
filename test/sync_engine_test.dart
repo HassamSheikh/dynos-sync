@@ -48,6 +48,14 @@ class InMemoryQueueStore implements QueueStore {
   Future<bool> hasPending(String table, String id) async {
     return _queue.any((e) => e.table == table && e.recordId == id && e.isPending);
   }
+
+  @override
+  Future<Set<String>> getPendingIds(String table) async {
+    return _queue
+        .where((e) => e.table == table && e.isPending)
+        .map((e) => e.recordId)
+        .toSet();
+  }
   
   @override
   Future<void> markSynced(String id) async {

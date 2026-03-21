@@ -15,6 +15,10 @@ abstract class QueueStore {
   /// Check if a specific record has a pending sync entry.
   Future<bool> hasPending(String table, String id);
 
+  /// Get a set of record IDs that have pending sync entries for a specific [table].
+  /// Useful for batching checks during pulls to avoid N+1 query bottlenecks.
+  Future<Set<String>> getPendingIds(String table);
+
   /// Mark an entry as successfully synced.
   Future<void> markSynced(String id);
 
