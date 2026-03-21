@@ -137,14 +137,22 @@ class InMemoryQueueStore implements QueueStore {
   final _retries = <String, int>{};
 
   @override Future<void> enqueue(SyncEntry e) async => _queue.add(e);
-  @override Future<List<SyncEntry>> getPending({int limit = 50}) async => 
-    _queue.where((e) => !_synced.contains(e.id)).take(limit).toList();
-  @override Future<Set<String>> getPendingIds(String t) async => 
+  @override Future<List<SyncEntry>> getPending({int limit = 50, DateTime? now}) async =>
+    _queue.where((e) {
+      if (_synced.contains(e.id)) return false;
+      if (now != null && e.nextRetryAt != null && e.nextRetryAt!.isAfter(now)) return false;
+      return true;
+    }).take(limit).toList();
+  @override Future<Set<String>> getPendingIds(String t) async =>
     _queue.where((e) => e.table == t && !_synced.contains(e.id)).map((e) => e.recordId).toSet();
-  @override Future<bool> hasPending(String t, String i) async => 
+  @override Future<List<SyncEntry>> getPendingEntries(String t, String id) async =>
+    _queue.where((e) => e.table == t && e.recordId == id && !_synced.contains(e.id)).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  @override Future<bool> hasPending(String t, String i) async =>
     _queue.any((e) => e.table == t && e.recordId == i && !_synced.contains(e.id));
   @override Future<void> markSynced(String id) async => _synced.add(id);
   @override Future<void> incrementRetry(String id) async { _retries[id] = (_retries[id] ?? 0) + 1; }
+  @override Future<void> setNextRetryAt(String id, DateTime nextRetryAt) async {}
   @override Future<void> deleteEntry(String id) async { _queue.removeWhere((e) => e.id == id); }
   @override Future<void> purgeSynced({Duration retention = const Duration(days: 30)}) async { _queue.removeWhere((e) => _synced.contains(e.id)); }
   @override Future<void> clearAll() async { _queue.clear(); _synced.clear(); }

@@ -13,11 +13,20 @@ class MockTimestampStore extends Mock implements TimestampStore {}
 class FastInMemoryQueue implements QueueStore {
   final _queue = <SyncEntry>[];
   @override Future<void> enqueue(SyncEntry e) async => _queue.add(e);
-  @override Future<List<SyncEntry>> getPending({int limit = 50}) async => _queue.where((e) => e.isPending).take(limit).toList();
+  @override Future<List<SyncEntry>> getPending({int limit = 50, DateTime? now}) async =>
+      _queue.where((e) {
+        if (!e.isPending) return false;
+        if (now != null && e.nextRetryAt != null && e.nextRetryAt!.isAfter(now)) return false;
+        return true;
+      }).take(limit).toList();
   @override Future<Set<String>> getPendingIds(String t) async => _queue.where((e) => e.table == t && e.isPending).map((e) => e.recordId).toSet();
+  @override Future<List<SyncEntry>> getPendingEntries(String t, String id) async =>
+      _queue.where((e) => e.table == t && e.recordId == id && e.isPending).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   @override Future<bool> hasPending(String t, String id) async => false;
   @override Future<void> markSynced(String id) async {}
   @override Future<void> incrementRetry(String id) async {}
+  @override Future<void> setNextRetryAt(String id, DateTime nextRetryAt) async {}
   @override Future<void> deleteEntry(String id) async {}
   @override Future<void> purgeSynced({Duration retention = const Duration(days: 30)}) async {}
   @override Future<void> clearAll() async => _queue.clear();

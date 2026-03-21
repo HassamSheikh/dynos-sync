@@ -13,11 +13,13 @@ class MockTimestampStore extends Mock implements TimestampStore {}
 class HeavyQueue implements QueueStore {
   int count = 0;
   @override Future<void> enqueue(SyncEntry e) async { count++; }
-  @override Future<List<SyncEntry>> getPending({int limit = 50}) async => [];
+  @override Future<List<SyncEntry>> getPending({int limit = 50, DateTime? now}) async => [];
   @override Future<Set<String>> getPendingIds(String t) async => {};
+  @override Future<List<SyncEntry>> getPendingEntries(String t, String id) async => [];
   @override Future<bool> hasPending(String t, String i) async => false;
   @override Future<void> markSynced(String id) async {}
   @override Future<void> incrementRetry(String id) async {}
+  @override Future<void> setNextRetryAt(String id, DateTime nextRetryAt) async {}
   @override Future<void> deleteEntry(String id) async {}
   @override Future<void> purgeSynced({Duration retention = const Duration(days: 30)}) async {}
   @override Future<void> clearAll() async {}

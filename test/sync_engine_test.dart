@@ -39,17 +39,21 @@ class BadRemoteStore implements RemoteStore {
 
 class InMemoryQueueStore implements QueueStore {
   final _queue = <SyncEntry>[];
-  
+
   @override
   Future<void> enqueue(SyncEntry entry) async {
     _queue.add(entry);
   }
-  
+
   @override
-  Future<List<SyncEntry>> getPending({int limit = 50}) async {
-    return _queue.where((e) => e.isPending).take(limit).toList();
+  Future<List<SyncEntry>> getPending({int limit = 50, DateTime? now}) async {
+    return _queue.where((e) {
+      if (!e.isPending) return false;
+      if (now != null && e.nextRetryAt != null && e.nextRetryAt!.isAfter(now)) return false;
+      return true;
+    }).take(limit).toList();
   }
-  
+
   @override
   Future<bool> hasPending(String table, String id) async {
     return _queue.any((e) => e.table == table && e.recordId == id && e.isPending);
@@ -62,22 +66,20 @@ class InMemoryQueueStore implements QueueStore {
         .map((e) => e.recordId)
         .toSet();
   }
-  
+
+  @override
+  Future<List<SyncEntry>> getPendingEntries(String table, String recordId) async {
+    return _queue
+        .where((e) => e.table == table && e.recordId == recordId && e.isPending)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
   @override
   Future<void> markSynced(String id) async {
     final index = _queue.indexWhere((e) => e.id == id);
-    if (index != -1) {
-      final old = _queue[index];
-      _queue[index] = SyncEntry(
-        id: old.id,
-        table: old.table,
-        recordId: old.recordId,
-        operation: old.operation,
-        payload: old.payload,
-        createdAt: old.createdAt,
-        syncedAt: DateTime.now().toUtc(),
-        retryCount: old.retryCount,
-      );
+    if (index != -1 && _queue[index].syncedAt == null) {
+      _queue[index] = _queue[index].copyWith(syncedAt: DateTime.now().toUtc());
     }
   }
 
@@ -85,17 +87,15 @@ class InMemoryQueueStore implements QueueStore {
   Future<void> incrementRetry(String id) async {
     final index = _queue.indexWhere((e) => e.id == id);
     if (index != -1) {
-      final old = _queue[index];
-      _queue[index] = SyncEntry(
-        id: old.id,
-        table: old.table,
-        recordId: old.recordId,
-        operation: old.operation,
-        payload: old.payload,
-        createdAt: old.createdAt,
-        syncedAt: old.syncedAt,
-        retryCount: old.retryCount + 1,
-      );
+      _queue[index] = _queue[index].copyWith(retryCount: _queue[index].retryCount + 1);
+    }
+  }
+
+  @override
+  Future<void> setNextRetryAt(String id, DateTime nextRetryAt) async {
+    final index = _queue.indexWhere((e) => e.id == id);
+    if (index != -1) {
+      _queue[index] = _queue[index].copyWith(nextRetryAt: nextRetryAt);
     }
   }
 
@@ -108,6 +108,9 @@ class InMemoryQueueStore implements QueueStore {
   Future<void> purgeSynced({Duration retention = const Duration(days: 30)}) async {
     _queue.removeWhere((e) => !e.isPending);
   }
+
+  @override
+  Future<void> clearAll() async => _queue.clear();
 }
 
 void main() {
@@ -134,38 +137,49 @@ void main() {
       },
     );
     
+    // Helper to reset nextRetryAt so the entry is eligible for the next drain
+    Future<void> clearBackoff() async {
+      final entries = await queue.getPending(now: DateTime.utc(9999));
+      for (final e in entries) {
+        await queue.setNextRetryAt(e.id, DateTime.utc(2000, 1, 1));
+      }
+    }
+
     // 1. Initial write
     await engine.write('tasks', '1', {'name': 'Poison'});
-    
+
     // Assert 1 attempt was made synchronously
     expect(remote.pushAttempts, 1);
-    
+
     // We should have 1 pending item
     var pending = await queue.getPending();
     expect(pending.length, 1);
     expect(pending.first.retryCount, 0); // Still 0 since we didn't use drain(), write raises background push exceptions silently
-    
+
     // 2. Drain cycle 1
     await engine.drain();
     expect(remote.pushAttempts, 2);
     expect(emittedErrors.last, contains('retry 1'));
-    
-    // 3. Drain cycle 2
+
+    // 3. Drain cycle 2 — clear backoff so entry is eligible
+    await clearBackoff();
     await engine.drain();
     expect(remote.pushAttempts, 3);
     expect(emittedErrors.last, contains('retry 2'));
-    
+
     // 4. Drain cycle 3
+    await clearBackoff();
     await engine.drain();
     expect(remote.pushAttempts, 4);
     expect(emittedErrors.last, contains('retry 3'));
-    
+
     // At this point, retryCount == 3 (maxRetries)
     // 5. Drain cycle 4 (Drop)
+    await clearBackoff();
     await engine.drain();
     expect(remote.pushAttempts, 5);
     expect(emittedErrors.last, contains('permanently failed'));
-    
+
     // Ensure the queue is now empty
     pending = await queue.getPending();
     expect(pending, isEmpty);
