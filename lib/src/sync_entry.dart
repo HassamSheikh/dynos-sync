@@ -10,6 +10,7 @@ class SyncEntry {
     required this.payload,
     required this.createdAt,
     this.syncedAt,
+    this.retryCount = 0,
   });
 
   final String id;
@@ -19,6 +20,7 @@ class SyncEntry {
   final Map<String, dynamic> payload;
   final DateTime createdAt;
   final DateTime? syncedAt;
+  final int retryCount;
 
   bool get isPending => syncedAt == null;
 }

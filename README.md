@@ -185,6 +185,7 @@ final sync = SyncEngine(
     batchSize: 50,                           // max entries per drain cycle
     queueRetention: Duration(days: 30),      // purge synced entries after 30 days
     stopOnFirstError: true,                  // stop drain on first push failure
+    maxRetries: 3,                           // drop poison-pill entries after 3 retries
   ),
   onError: (error, stack, context) {
     logger.error('Sync error in $context', error, stack);
@@ -272,7 +273,7 @@ final sync = SyncEngine(
 );
 ```
 
-- **Drain errors:** queue entries stay pending, retried next cycle
+- **Drain errors:** queue entries stay pending, retried next cycle. If they fail `maxRetries` times, they are permanently dropped and emit a `drain_poison_pill[...]` error context.
 - **Pull errors:** individual table pull fails silently, other tables continue
 - **Never throws** from `syncAll()`, `drain()`, or `pullAll()` — errors routed to `onError`
 
