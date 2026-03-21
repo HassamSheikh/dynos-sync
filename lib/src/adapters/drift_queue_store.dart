@@ -92,6 +92,11 @@ class DriftQueueStore implements QueueStore {
     );
   }
 
+  @override
+  Future<void> clearAll() async {
+    await _db.customStatement('DELETE FROM dynos_sync_queue');
+  }
+
   SyncEntry _mapRow(QueryRow row) {
     return SyncEntry(
       id: row.read<String>('id'),

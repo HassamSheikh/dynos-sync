@@ -30,4 +30,8 @@ abstract class QueueStore {
 
   /// Delete synced entries older than [retention].
   Future<void> purgeSynced({Duration retention = const Duration(days: 30)});
+
+  /// Hard delete EVERYTHING in the queue (pending or synced).
+  /// Required for session isolation.
+  Future<void> clearAll();
 }

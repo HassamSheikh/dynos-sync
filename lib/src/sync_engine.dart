@@ -39,6 +39,7 @@ class SyncEngine {
     required this.queue,
     required this.timestamps,
     required this.tables,
+    this.userId,
     this.config = const SyncConfig(),
     this.onError,
   });
@@ -53,6 +54,11 @@ class SyncEngine {
 
   /// Engine configuration.
   final SyncConfig config;
+
+  /// Current authenticated user ID.
+  /// If provided, [write] operations will be checked for RLS-misMatch
+  /// before being queued.
+  final String? userId;
 
   /// Optional error callback. Called with (error, stackTrace, context).
   /// If null, errors are silently swallowed.
@@ -217,6 +223,17 @@ class SyncEngine {
     }
   }
 
+  /// Wipe all local sync state (queue and timestamps).
+  /// 
+  /// **CRITICAL:** Call this on logout to prevent "Cross-User Isolation" leaks,
+  /// where one user's unsynced data might be pushed under the next user's session.
+  Future<void> logout() async {
+    await queue.clearAll();
+    for (final table in tables) {
+      await timestamps.set(table, DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+    }
+  }
+
   // ── Internal ──────────────────────────────────────────────────────────────
 
   Future<void> _enqueue(
@@ -225,6 +242,14 @@ class SyncEngine {
     SyncOperation operation,
     Map<String, dynamic> data,
   ) async {
+    // 🛡️ Row-Level Security (RLS) local bypass check
+    if (userId != null) {
+      final ownerId = data['user_id'] ?? data['owner_id'];
+      if (ownerId != null && ownerId != userId) {
+        throw Exception('Security Error: [RLS_Bypass] row owner ($ownerId) does not match authenticated user ($userId)');
+      }
+    }
+
     final entry = SyncEntry(
       id: _uuid.v4(),
       table: table,
