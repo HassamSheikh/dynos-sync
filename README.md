@@ -114,11 +114,12 @@ The user sees changes instantly. The sync happens in the background.
 ```
 App Launch              →   syncAll()
                             ├── drain()
-                            │   └── Push pending queue entries (batch of 50)
+                            │   └── pushBatch() – Push entire queue in 1-2 API calls
                             └── pullAll()
                                 ├── getRemoteTimestamps()  →  1 lightweight query
                                 ├── Compare remote vs local timestamps
                                 └── Only pull tables where remote > local
+                                    ├── getPendingIds(table) → 1 local query (O(1) lookup)
                                     └── pullSince(table, lastSync)
 ```
 
@@ -147,6 +148,7 @@ abstract class LocalStore {
 /// Your remote backend (Supabase, Firebase, Appwrite, custom REST)
 abstract class RemoteStore {
   Future<void> push(String table, String id, SyncOperation op, Map<String, dynamic> data);
+  Future<void> pushBatch(List<SyncEntry> entries);
   Future<List<Map<String, dynamic>>> pullSince(String table, DateTime since);
   Future<Map<String, DateTime>> getRemoteTimestamps();
 }
@@ -155,6 +157,7 @@ abstract class RemoteStore {
 abstract class QueueStore {
   Future<void> enqueue(SyncEntry entry);
   Future<List<SyncEntry>> getPending({int limit = 50});
+  Future<Set<String>> getPendingIds(String table);
   Future<void> markSynced(String id);
   Future<void> purgeSynced({Duration retention = const Duration(days: 30)});
 }

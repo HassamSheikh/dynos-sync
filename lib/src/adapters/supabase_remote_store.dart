@@ -1,6 +1,7 @@
 import 'package:supabase/supabase.dart';
 import '../remote_store.dart';
 import '../sync_operation.dart';
+import '../sync_entry.dart';
 
 /// [RemoteStore] implementation using Supabase Postgrest.
 ///
@@ -52,6 +53,37 @@ class SupabaseRemoteStore implements RemoteStore {
         await client.from(table).upsert(data);
       case SyncOperation.delete:
         await client.from(table).delete().eq('id', id);
+    }
+  }
+
+  @override
+  Future<void> pushBatch(List<SyncEntry> entries) async {
+    if (entries.isEmpty) return;
+
+    // Group entries by table and operation
+    final groups = <String, Map<SyncOperation, List<SyncEntry>>>{};
+    for (final entry in entries) {
+      final tableGroups = groups.putIfAbsent(entry.table, () => {});
+      tableGroups.putIfAbsent(entry.operation, () => []).add(entry);
+    }
+
+    for (final tableEntry in groups.entries) {
+      final tableName = tableEntry.key;
+      final opsMap = tableEntry.value;
+
+      // Batch Upserts
+      final upserts = opsMap[SyncOperation.upsert];
+      if (upserts != null && upserts.isNotEmpty) {
+        final payloads = upserts.map((e) => e.payload).toList();
+        await client.from(tableName).upsert(payloads);
+      }
+
+      // Batch Deletes
+      final deletes = opsMap[SyncOperation.delete];
+      if (deletes != null && deletes.isNotEmpty) {
+        final ids = deletes.map((e) => e.recordId).toList();
+        await client.from(tableName).delete().inFilter('id', ids);
+      }
     }
   }
 

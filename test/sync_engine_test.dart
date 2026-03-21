@@ -25,6 +25,12 @@ class BadRemoteStore implements RemoteStore {
   }
   
   @override
+  Future<void> pushBatch(List<SyncEntry> entries) async {
+    // Force a failure to test the fallback logic
+    throw Exception('Simulated Batch Failure');
+  }
+  
+  @override
   Future<List<Map<String, dynamic>>> pullSince(String table, DateTime since) async => [];
   
   @override
@@ -47,6 +53,14 @@ class InMemoryQueueStore implements QueueStore {
   @override
   Future<bool> hasPending(String table, String id) async {
     return _queue.any((e) => e.table == table && e.recordId == id && e.isPending);
+  }
+
+  @override
+  Future<Set<String>> getPendingIds(String table) async {
+    return _queue
+        .where((e) => e.table == table && e.isPending)
+        .map((e) => e.recordId)
+        .toSet();
   }
   
   @override
