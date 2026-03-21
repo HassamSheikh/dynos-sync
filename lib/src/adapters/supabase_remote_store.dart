@@ -1,5 +1,6 @@
 import 'package:supabase/supabase.dart';
 import '../remote_store.dart';
+import '../sync_exceptions.dart';
 import '../sync_operation.dart';
 import '../sync_entry.dart';
 
@@ -48,11 +49,18 @@ class SupabaseRemoteStore implements RemoteStore {
     SyncOperation operation,
     Map<String, dynamic> data,
   ) async {
-    switch (operation) {
-      case SyncOperation.upsert:
-        await client.from(table).upsert(data);
-      case SyncOperation.delete:
-        await client.from(table).delete().eq('id', id);
+    try {
+      switch (operation) {
+        case SyncOperation.upsert:
+          await client.from(table).upsert(data);
+        case SyncOperation.delete:
+          await client.from(table).delete().eq('id', id);
+      }
+    } on AuthException catch (e) {
+      throw AuthExpiredException(e);
+    } catch (e) {
+      if (_isAuthError(e)) throw AuthExpiredException(e);
+      rethrow;
     }
   }
 
@@ -67,23 +75,30 @@ class SupabaseRemoteStore implements RemoteStore {
       tableGroups.putIfAbsent(entry.operation, () => []).add(entry);
     }
 
-    for (final tableEntry in groups.entries) {
-      final tableName = tableEntry.key;
-      final opsMap = tableEntry.value;
+    try {
+      for (final tableEntry in groups.entries) {
+        final tableName = tableEntry.key;
+        final opsMap = tableEntry.value;
 
-      // Batch Upserts
-      final upserts = opsMap[SyncOperation.upsert];
-      if (upserts != null && upserts.isNotEmpty) {
-        final payloads = upserts.map((e) => e.payload).toList();
-        await client.from(tableName).upsert(payloads);
-      }
+        // Batch Upserts
+        final upserts = opsMap[SyncOperation.upsert];
+        if (upserts != null && upserts.isNotEmpty) {
+          final payloads = upserts.map((e) => e.payload).toList();
+          await client.from(tableName).upsert(payloads);
+        }
 
-      // Batch Deletes
-      final deletes = opsMap[SyncOperation.delete];
-      if (deletes != null && deletes.isNotEmpty) {
-        final ids = deletes.map((e) => e.recordId).toList();
-        await client.from(tableName).delete().inFilter('id', ids);
+        // Batch Deletes
+        final deletes = opsMap[SyncOperation.delete];
+        if (deletes != null && deletes.isNotEmpty) {
+          final ids = deletes.map((e) => e.recordId).toList();
+          await client.from(tableName).delete().inFilter('id', ids);
+        }
       }
+    } on AuthException catch (e) {
+      throw AuthExpiredException(e);
+    } catch (e) {
+      if (_isAuthError(e)) throw AuthExpiredException(e);
+      rethrow;
     }
   }
 
@@ -92,11 +107,22 @@ class SupabaseRemoteStore implements RemoteStore {
     String table,
     DateTime since,
   ) async {
-    final rows = await client
-        .from(table)
-        .select()
-        .gt('updated_at', since.toIso8601String());
-    return List<Map<String, dynamic>>.from(rows);
+    try {
+      final rows = await client
+          .from(table)
+          .select()
+          .gt('updated_at', since.toIso8601String());
+      return List<Map<String, dynamic>>.from(rows);
+    } on AuthException catch (e) {
+      throw AuthExpiredException(e);
+    } on FormatException catch (e) {
+      throw SyncDeserializationException(e);
+    } on TypeError catch (e) {
+      throw SyncDeserializationException(e);
+    } catch (e) {
+      if (_isAuthError(e)) throw AuthExpiredException(e);
+      rethrow;
+    }
   }
 
   @override
@@ -122,10 +148,24 @@ class SupabaseRemoteStore implements RemoteStore {
       }
 
       return result;
+    } on AuthException catch (e) {
+      throw AuthExpiredException(e);
     } catch (e) {
+      if (_isAuthError(e)) throw AuthExpiredException(e);
       // Rethrow so SyncEngine can catch and route to onError,
       // avoiding a silent fallback to expensive full-syncs.
       rethrow;
     }
+  }
+
+  /// Heuristic check for auth errors that don't throw AuthException.
+  /// Some Supabase errors surface as PostgrestException with status 401/403.
+  bool _isAuthError(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('401') ||
+        msg.contains('403') ||
+        msg.contains('jwt expired') ||
+        msg.contains('invalid token') ||
+        msg.contains('not authenticated');
   }
 }
