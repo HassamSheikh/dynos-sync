@@ -37,6 +37,7 @@ SyncEngine createSyncEngine({
       batchSize: 50,
       queueRetention: Duration(days: 30),
       stopOnFirstError: true,
+      maxRetries: 3,
     ),
     onError: (error, stack, context) {
       print('Sync error [$context]: $error');
