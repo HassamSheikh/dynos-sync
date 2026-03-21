@@ -18,6 +18,12 @@ abstract class QueueStore {
   /// Mark an entry as successfully synced.
   Future<void> markSynced(String id);
 
+  /// Increment the retry count for a failed entry.
+  Future<void> incrementRetry(String id);
+
+  /// Permanently delete an entry from the queue (e.g., dead letter / poison pill).
+  Future<void> deleteEntry(String id);
+
   /// Delete synced entries older than [retention].
   Future<void> purgeSynced({Duration retention = const Duration(days: 30)});
 }

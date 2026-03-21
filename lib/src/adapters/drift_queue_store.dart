@@ -15,8 +15,8 @@ class DriftQueueStore implements QueueStore {
   @override
   Future<void> enqueue(SyncEntry entry) async {
     await _db.customStatement(
-      'INSERT INTO dynos_sync_queue (id, table_name, record_id, operation, payload, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO dynos_sync_queue (id, table_name, record_id, operation, payload, created_at, retry_count) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
         entry.id,
         entry.table,
@@ -24,6 +24,7 @@ class DriftQueueStore implements QueueStore {
         entry.operation.name,
         jsonEncode(entry.payload),
         entry.createdAt.millisecondsSinceEpoch,
+        entry.retryCount,
       ],
     );
   }
@@ -58,6 +59,22 @@ class DriftQueueStore implements QueueStore {
   }
 
   @override
+  Future<void> incrementRetry(String id) async {
+    await _db.customStatement(
+      'UPDATE dynos_sync_queue SET retry_count = retry_count + 1 WHERE id = ?',
+      [id],
+    );
+  }
+
+  @override
+  Future<void> deleteEntry(String id) async {
+    await _db.customStatement(
+      'DELETE FROM dynos_sync_queue WHERE id = ?',
+      [id],
+    );
+  }
+
+  @override
   Future<void> purgeSynced({Duration retention = const Duration(days: 30)}) async {
     final cutoff = DateTime.now().toUtc().subtract(retention).millisecondsSinceEpoch;
     await _db.customStatement(
@@ -83,6 +100,7 @@ class DriftQueueStore implements QueueStore {
               isUtc: true,
             )
           : null,
+      retryCount: row.read<int>('retry_count'),
     );
   }
 }

@@ -118,8 +118,14 @@ class SyncEngine {
         await remote.push(entry.table, entry.recordId, entry.operation, entry.payload);
         await queue.markSynced(entry.id);
       } catch (e, st) {
-        onError?.call(e, st, 'drain[${entry.table}/${entry.recordId}]');
-        if (config.stopOnFirstError) break;
+        if (entry.retryCount >= config.maxRetries) {
+          onError?.call(e, st, 'drain_poison_pill[${entry.table}/${entry.recordId}] permanently failed');
+          await queue.deleteEntry(entry.id);
+        } else {
+          onError?.call(e, st, 'drain[${entry.table}/${entry.recordId}] retry ${entry.retryCount + 1}');
+          await queue.incrementRetry(entry.id);
+          if (config.stopOnFirstError) break;
+        }
       }
     }
 

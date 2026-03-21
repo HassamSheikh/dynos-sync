@@ -14,6 +14,7 @@ class DynosSyncQueueTable extends Table {
   TextColumn get payload => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
