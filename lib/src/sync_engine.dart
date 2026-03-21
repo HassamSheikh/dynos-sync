@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:uuid/uuid.dart';
 
 import 'local_store.dart';
@@ -8,6 +10,9 @@ import 'timestamp_store.dart';
 import 'sync_config.dart';
 import 'sync_entry.dart';
 import 'sync_operation.dart';
+import 'sync_event.dart';
+import 'sync_exceptions.dart';
+import 'conflict_strategy.dart';
 
 /// A local-first, offline-capable sync engine.
 ///
@@ -66,6 +71,34 @@ class SyncEngine {
 
   static const _uuid = Uuid();
 
+  // ── Event Stream ──────────────────────────────────────────────────────────
+
+  final StreamController<SyncEvent> _eventController =
+      StreamController<SyncEvent>.broadcast();
+
+  /// Stream of sync lifecycle events.
+  Stream<SyncEvent> get events => _eventController.stream;
+
+  void _emit(SyncEvent event) {
+    if (!_eventController.isClosed) {
+      _eventController.add(event);
+    }
+  }
+
+  /// Release resources held by this engine.
+  void dispose() {
+    _eventController.close();
+  }
+
+  // ── Drain Lock ────────────────────────────────────────────────────────────
+
+  bool _draining = false;
+
+  /// Whether [drain] is currently executing.
+  bool get isDraining => _draining;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
   Map<String, dynamic> _maskPayload(Map<String, dynamic> data) {
     if (config.sensitiveFields.isEmpty) return data;
     final masked = Map<String, dynamic>.from(data);
@@ -77,10 +110,31 @@ class SyncEngine {
     return masked;
   }
 
+  // ignore: unused_element
   Duration _getRetryDelay(int attempt) {
     if (!config.useExponentialBackoff) return Duration.zero;
     // 2, 4, 8, 16... seconds
     return Duration(seconds: 1 << attempt);
+  }
+
+  /// Extract an `updated_at` timestamp from a data map.
+  DateTime? _extractTimestamp(Map<String, dynamic> data) {
+    final value = data['updated_at'];
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+    }
+    return null;
+  }
+
+  /// Validate that a payload does not exceed [SyncConfig.maxPayloadBytes].
+  void _validatePayloadSize(Map<String, dynamic> data) {
+    final bytes = utf8.encode(jsonEncode(data)).length;
+    if (bytes > config.maxPayloadBytes) {
+      throw PayloadTooLargeException(bytes: bytes, limit: config.maxPayloadBytes);
+    }
   }
 
   // ── Initial sync gate ─────────────────────────────────────────────────────
@@ -102,10 +156,13 @@ class SyncEngine {
     String id,
     Map<String, dynamic> data,
   ) async {
+    // Validate payload size before anything
+    _validatePayloadSize(data);
+
     // 1. Queue it (includes RLS check)
     await _enqueue(table, id, SyncOperation.upsert, data);
-    
-    // 2. Write it locally 
+
+    // 2. Write it locally
     await local.upsert(table, id, data);
   }
 
@@ -113,7 +170,7 @@ class SyncEngine {
   Future<void> remove(String table, String id) async {
     // 1. Queue deletion
     await _enqueue(table, id, SyncOperation.delete, {});
-    
+
     // 2. Remove locally
     await local.delete(table, id);
   }
@@ -128,6 +185,9 @@ class SyncEngine {
     Map<String, dynamic> data, {
     SyncOperation operation = SyncOperation.upsert,
   }) async {
+    // Validate payload size before anything
+    _validatePayloadSize(data);
+
     await _enqueue(table, id, operation, data);
   }
 
@@ -139,39 +199,102 @@ class SyncEngine {
   /// On failure: stops at first error if [SyncConfig.stopOnFirstError],
   /// otherwise skips and continues.
   Future<void> drain() async {
-    final pending = await queue.getPending(limit: config.batchSize);
-
-    if (pending.isEmpty) return;
+    if (_draining) return;
+    _draining = true;
 
     try {
-      // 🚀 Performance Optimization: Try to sync everything in a single batch API call.
-      // This reduces your Supabase/Firebase bill and speeds up syncing by up to 50x.
-      await remote.pushBatch(pending);
-      for (final entry in pending) {
-        await queue.markSynced(entry.id);
-      }
-    } catch (e, st) {
-      // 🔄 Fallback: If the batch fails (e.g., one record violates a constraint), 
-      // process them individually to isolate the "poison pill" and allow the rest to sync.
-      for (final entry in pending) {
-        try {
-          await remote.push(entry.table, entry.recordId, entry.operation, entry.payload);
+      final pending = await queue.getPending(
+        limit: config.batchSize,
+        now: DateTime.now().toUtc(),
+      );
+
+      if (pending.isEmpty) return;
+
+      try {
+        // Try to sync everything in a single batch API call.
+        await remote.pushBatch(pending);
+        for (final entry in pending) {
           await queue.markSynced(entry.id);
-        } catch (e, st) {
-          if (entry.retryCount >= config.maxRetries) {
-            onError?.call(e, st, 'drain_poison_pill[${entry.table}/${entry.recordId}] permanently failed');
-            await queue.deleteEntry(entry.id);
-          } else {
-            final masked = _maskPayload(entry.payload);
-            onError?.call(e, st, 'drain[${entry.table}/${entry.recordId}] payload: $masked retry ${entry.retryCount + 1}');
-            await queue.incrementRetry(entry.id);
-            if (config.stopOnFirstError) break;
+        }
+      } on AuthExpiredException catch (e) {
+        _emit(SyncAuthRequired(
+          timestamp: DateTime.now().toUtc(),
+          error: e,
+        ));
+        return;
+      } catch (_) {
+        // Fallback: If the batch fails, process individually to isolate
+        // the "poison pill" and allow the rest to sync.
+        for (final entry in pending) {
+          try {
+            await remote.push(
+              entry.table,
+              entry.recordId,
+              entry.operation,
+              entry.payload,
+            );
+            await queue.markSynced(entry.id);
+          } on AuthExpiredException catch (e) {
+            _emit(SyncAuthRequired(
+              timestamp: DateTime.now().toUtc(),
+              error: e,
+            ));
+            return;
+          } catch (e, st) {
+            if (entry.retryCount >= config.maxRetries) {
+              onError?.call(
+                e,
+                st,
+                'drain_poison_pill[${entry.table}/${entry.recordId}] permanently failed',
+              );
+              _emit(SyncPoisonPill(
+                timestamp: DateTime.now().toUtc(),
+                entry: entry,
+              ));
+              await queue.deleteEntry(entry.id);
+            } else {
+              final masked = _maskPayload(entry.payload);
+              onError?.call(
+                e,
+                st,
+                'drain[${entry.table}/${entry.recordId}] payload: $masked retry ${entry.retryCount + 1}',
+              );
+              _emit(SyncError(
+                timestamp: DateTime.now().toUtc(),
+                error: e,
+                context:
+                    'drain[${entry.table}/${entry.recordId}] retry ${entry.retryCount + 1}',
+              ));
+
+              // Per-entry backoff
+              final backoffSeconds = math.min(
+                math.pow(2, entry.retryCount + 1).toInt(),
+                config.maxBackoff.inSeconds,
+              );
+              final nextRetry = DateTime.now()
+                  .toUtc()
+                  .add(Duration(seconds: backoffSeconds));
+
+              await queue.incrementRetry(entry.id);
+              await queue.setNextRetryAt(entry.id, nextRetry);
+
+              _emit(SyncRetryScheduled(
+                timestamp: DateTime.now().toUtc(),
+                entry: entry,
+                nextRetryAt: nextRetry,
+              ));
+
+              if (config.stopOnFirstError) break;
+            }
           }
         }
       }
-    }
 
-    await queue.purgeSynced(retention: config.queueRetention);
+      await queue.purgeSynced(retention: config.queueRetention);
+    } finally {
+      _draining = false;
+      _emit(SyncDrainComplete(timestamp: DateTime.now().toUtc()));
+    }
   }
 
   // ── Pull (delta sync) ─────────────────────────────────────────────────────
@@ -202,8 +325,18 @@ class SyncEngine {
       }
 
       await Future.wait(pulls);
+    } on AuthExpiredException catch (e) {
+      _emit(SyncAuthRequired(
+        timestamp: DateTime.now().toUtc(),
+        error: e,
+      ));
     } catch (e, st) {
       onError?.call(e, st, 'pullAll');
+      _emit(SyncError(
+        timestamp: DateTime.now().toUtc(),
+        error: e,
+        context: 'pullAll',
+      ));
     }
   }
 
@@ -211,24 +344,143 @@ class SyncEngine {
   Future<void> _pullTable(String table, DateTime since) async {
     try {
       final rows = await remote.pullSince(table, since);
-      if (rows.isEmpty) return;
+      if (rows.isEmpty) {
+        _emit(SyncPullComplete(
+          timestamp: DateTime.now().toUtc(),
+          table: table,
+          rowCount: 0,
+        ));
+        return;
+      }
 
       // Batch-fetch all IDs for un-synced local records for this table.
-      // This prevents the N+1 query problem during the ensuing row processing.
       final pendingIds = await queue.getPendingIds(table);
 
+      var upsertedCount = 0;
       for (final row in rows) {
         final id = row['id']?.toString();
         if (id == null) continue;
 
-        // Skip overwriting local data if there is a pending user edit.
-        if (pendingIds.contains(id)) continue;
+        // RLS pull validation
+        if (userId != null) {
+          final rowOwner =
+              (row['user_id'] ?? row['owner_id'])?.toString();
+          if (rowOwner != null && rowOwner != userId) {
+            _emit(SyncError(
+              timestamp: DateTime.now().toUtc(),
+              error: RlsViolationException(recordId: id, rowOwner: rowOwner),
+              context: 'rls_violation[$table/$id]',
+            ));
+            continue;
+          }
+        }
+
+        // Conflict resolution instead of blind skip
+        if (pendingIds.contains(id)) {
+          await _resolveConflict(table, id, row);
+          upsertedCount++;
+          continue;
+        }
 
         await local.upsert(table, id, row);
+        upsertedCount++;
       }
+
       await timestamps.set(table, DateTime.now().toUtc());
+
+      _emit(SyncPullComplete(
+        timestamp: DateTime.now().toUtc(),
+        table: table,
+        rowCount: upsertedCount,
+      ));
     } catch (e, st) {
       onError?.call(e, st, 'pull[$table]');
+      _emit(SyncError(
+        timestamp: DateTime.now().toUtc(),
+        error: e,
+        context: 'pull[$table]',
+      ));
+    }
+  }
+
+  // ── Conflict Resolution ───────────────────────────────────────────────────
+
+  Future<void> _resolveConflict(
+    String table,
+    String id,
+    Map<String, dynamic> remoteRow,
+  ) async {
+    final localEntries = await queue.getPendingEntries(table, id);
+    final localEntry = localEntries.isNotEmpty ? localEntries.first : null;
+
+    // If local entry is a DELETE operation: delete wins (skip remote update)
+    if (localEntry != null && localEntry.operation == SyncOperation.delete) {
+      _emit(SyncConflict(
+        timestamp: DateTime.now().toUtc(),
+        table: table,
+        recordId: id,
+        localVersion: localEntry.payload,
+        remoteVersion: remoteRow,
+        resolvedVersion: localEntry.payload,
+        strategyUsed: ConflictStrategy.clientWins,
+      ));
+      return;
+    }
+
+    final localPayload = localEntry?.payload ?? <String, dynamic>{};
+    Map<String, dynamic> resolved;
+    ConflictStrategy strategyUsed = config.conflictStrategy;
+
+    switch (config.conflictStrategy) {
+      case ConflictStrategy.lastWriteWins:
+        final localTs = _extractTimestamp(localPayload);
+        final remoteTs = _extractTimestamp(remoteRow);
+
+        if (localTs != null && remoteTs != null) {
+          if (localTs.isAfter(remoteTs)) {
+            resolved = localPayload;
+          } else {
+            resolved = remoteRow;
+          }
+        } else {
+          // No timestamps available — server wins as safe default
+          resolved = remoteRow;
+          strategyUsed = ConflictStrategy.serverWins;
+        }
+        break;
+
+      case ConflictStrategy.serverWins:
+        resolved = remoteRow;
+        break;
+
+      case ConflictStrategy.clientWins:
+        resolved = localPayload;
+        break;
+
+      case ConflictStrategy.custom:
+        resolved = await config.onConflict!(table, id, localPayload, remoteRow);
+        break;
+    }
+
+    _emit(SyncConflict(
+      timestamp: DateTime.now().toUtc(),
+      table: table,
+      recordId: id,
+      localVersion: localPayload,
+      remoteVersion: remoteRow,
+      resolvedVersion: resolved,
+      strategyUsed: strategyUsed,
+    ));
+
+    // Upsert the winner locally
+    await local.upsert(table, id, resolved);
+
+    // If server won, delete local queue entries for this record
+    final serverWon = identical(resolved, remoteRow);
+    if (serverWon) {
+      for (final entry in localEntries) {
+        await queue.deleteEntry(entry.id);
+      }
     }
   }
 
@@ -247,13 +499,16 @@ class SyncEngine {
   }
 
   /// Wipe all local sync state (queue and timestamps).
-  /// 
+  ///
   /// **CRITICAL:** Call this on logout to prevent "Cross-User Isolation" leaks,
   /// where one user's unsynced data might be pushed under the next user's session.
   Future<void> logout() async {
     await queue.clearAll();
     for (final table in tables) {
-      await timestamps.set(table, DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+      await timestamps.set(
+        table,
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      );
     }
   }
 
@@ -265,11 +520,13 @@ class SyncEngine {
     SyncOperation operation,
     Map<String, dynamic> data,
   ) async {
-    // 🛡️ Row-Level Security (RLS) local bypass check
+    // Row-Level Security (RLS) local bypass check
     if (userId != null) {
       final ownerId = data['user_id'] ?? data['owner_id'];
       if (ownerId != null && ownerId != userId) {
-        throw Exception('Security Error: [RLS_Bypass] row owner ($ownerId) does not match authenticated user ($userId)');
+        throw Exception(
+          'Security Error: [RLS_Bypass] row owner ($ownerId) does not match authenticated user ($userId)',
+        );
       }
     }
 
@@ -287,6 +544,11 @@ class SyncEngine {
     try {
       await remote.push(table, id, operation, data);
       await queue.markSynced(entry.id);
+    } on AuthExpiredException catch (e) {
+      _emit(SyncAuthRequired(
+        timestamp: DateTime.now().toUtc(),
+        error: e,
+      ));
     } catch (_) {
       // Will retry on next drain()
     }
