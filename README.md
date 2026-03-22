@@ -2,39 +2,56 @@
   <img src="assets/logo.svg" alt="dynos.fit logo" width="320px">
 </p>
 
-# 🛡️ dynos_sync
+# dynos_sync
 
-**High-Reliability, Production-Hardened Sync Engine for Dart & Flutter.**  
-*Built by the team at [**dynos.fit**](https://dynos.fit) to power high-concurrency workout synchronization.*
+**Production-grade offline-first sync engine for Dart & Flutter.**
+Built by the team at [**dynos.fit**](https://dynos.fit) to power high-concurrency workout synchronization.
 
 [![Pub.dev](https://img.shields.io/pub/v/dynos_sync)](https://pub.dev/packages/dynos_sync)
 [![Pub Points](https://img.shields.io/pub/points/dynos_sync)](https://pub.dev/packages/dynos_sync/score)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Security Audit: PASS](https://img.shields.io/badge/Security_Audit-42/42_PASS-2DD4A8)](doc/security_audit.md)
-[![Performance: Elite](https://img.shields.io/badge/Performance-10k_writes/sec-blueviolet)](#)
-
-`dynos_sync` is a high-performance, headless sync engine designed to bridge the gap between local storage (SQLite/Drift) and remote backends (Supabase/REST). Built for applications that demand **absolute reliability**, **zero-jank performance**, and **hardened security**.
-
-## 🦾 Battle-Tested in Production
-
-Developed as the core synchronization layer for [**dynos.fit**](https://dynos.fit), this engine handles the heavy lifting of offline-first persistence and real-time data reconciliation for high-scale fitness telemetry. It is engineered to survive the most demanding production environments.
+[![Security Audit: 130 Tests](https://img.shields.io/badge/Security_Audit-130/130_PASS-2DD4A8)](doc/security_audit.md)
+[![Performance: 50k+ writes/sec](https://img.shields.io/badge/Performance-50k+_writes/sec-blueviolet)](#performance)
 
 ---
 
-## 🚀 Why dynos_sync?
+## What it does
 
-Most sync libraries focus on simple data mapping. `dynos_sync` focuses on the **Sync Lifecycle** and **Adversarial Resilience**. It is engineered to handle "thundering herd" ingestion, dead-letter recovery, and cross-user data isolation on shared devices.
+`dynos_sync` sits between your local database and remote backend. Every write goes to the local DB first, gets queued for sync, and drains to the server when connectivity allows. On launch, it delta-pulls only what changed. Conflicts are resolved automatically.
 
-*   **⚡ Zero-Jank Architecture**: Direct support for Background Isolates, ensuring UI remains at 120 FPS during massive 10k+ record pulls.
-*   **🛡️ Hardened Security**: Built-in PII redaction, Local RLS Pre-flight gates, and automated session purges.
-*   **🏢 Enterprise Reliability**: Atomic transactions, exponential backoff (2, 4, 8s...), and conflict resolution strategies (LWW, Client Wins, Custom).
-*   **🛠️ Headless & Pluggable**: No code generation. Plugs into your existing database and API via clean interfaces.
+```
+Flutter App  -->  SyncEngine  -->  Local DB (Drift/SQLite)
+                      |
+                      +--->  Sync Queue  -->  Remote API (Supabase/REST)
+```
+
+**Database and backend agnostic.** Plug in any local store, any remote API, any queue backend via clean interfaces.
 
 ---
 
-## 📦 Installation
+## Features
 
-Add to your `pubspec.yaml`:
+| Category | What you get |
+|---|---|
+| **Offline-first writes** | `write()` persists locally + queues for sync in one atomic call |
+| **Delta sync** | `pullAll()` compares timestamps, only fetches tables with changes |
+| **Conflict resolution** | Last-write-wins, server-wins, client-wins, or custom callback |
+| **Runtime table registration** | `addTable()` / `removeTable()` after engine is running |
+| **PII redaction** | Sensitive fields masked with `[REDACTED]` before storage and push |
+| **Row-Level Security** | Local RLS gate blocks writes with mismatched `user_id` |
+| **Exponential backoff** | Failed pushes retry with 2^n delays, capped at `maxBackoff` |
+| **Poison pill isolation** | Permanently failing entries are dropped after `maxRetries` |
+| **Batch push** | `drain()` pushes up to `batchSize` entries per cycle |
+| **Auth expiry handling** | `AuthExpiredException` emits `SyncAuthRequired` event, stops drain |
+| **Cross-user isolation** | `logout()` wipes queue, local data, and timestamps |
+| **Event stream** | Broadcast stream of typed events for UI/logging integration |
+| **Background isolate** | `IsolateSyncEngine` wraps sync in a dedicated isolate |
+| **Payload size limits** | Rejects payloads exceeding `maxPayloadBytes` |
+| **Drain lock** | Prevents concurrent drain operations |
+
+---
+
+## Installation
 
 ```yaml
 dependencies:
@@ -43,90 +60,189 @@ dependencies:
 
 ---
 
-## 🏗️ Architecture
+## Quick start
 
-`dynos_sync` sits in the center of your data layer, coordinating between the **Local Store**, **Remote Store**, and the **Sync Queue**.
-
-```mermaid
-graph LR
-    App[Flutter App] -->|Optimistic Write| Engine[dynos_sync Engine]
-    Engine -->|Atomic Trans| Queue[(Sync Queue)]
-    Engine -->|Persistence| DB[(Local DB)]
-    Engine -->|Headless Pull| API[Remote API]
-    Queue -->|Exp Backoff| API
-```
-
----
-
-## ⚡ Quick Start
-
-### 1. Configure the Engine
-Set up your stores and tables. `dynos_sync` works with any database (Drift, Hive, Isar) using our interface adapters.
+### 1. Create the engine
 
 ```dart
 final sync = SyncEngine(
   local: DriftLocalStore(db),
-  remote: SupabaseRemoteStore(client: client, userId: () => activeUserId),
+  remote: SupabaseRemoteStore(client: client, userId: () => uid),
   queue: DriftQueueStore(db),
   timestamps: DriftTimestampStore(db),
-  tables: ['workouts', 'profiles', 'tasks'],
+  tables: ['tasks', 'notes'],
+  userId: uid,
   config: const SyncConfig(
-    sensitiveFields: ['password', 'ssn'], // 🛡️ Scrub PII from logs
-    useExponentialBackoff: true,          // 📶 Scalable retry logic
+    batchSize: 50,
+    sensitiveFields: ['password', 'ssn'],
     conflictStrategy: ConflictStrategy.lastWriteWins,
   ),
 );
 ```
 
-### 2. Perform Atomic Writes
-Every write is automatically committed to the **Local DB** and the **Sync Queue** as a unified operation.
+### 2. Write data
 
 ```dart
-// Local update + Queue for Push happens instantly
 await sync.write('tasks', id, {
   'id': id,
-  'title': 'Solve for Earth',
+  'title': 'Buy milk',
   'updated_at': DateTime.now().toUtc().toIso8601String(),
 });
 ```
 
----
+### 3. Sync on app launch
 
-## 📊 Performance Benchmark
+```dart
+await sync.syncAll();          // drain pending + pull remote changes
+await sync.initialSyncDone;    // wait in splash screen
+```
 
-We subjected the engine to a "Thundering Herd" stress test (10,000 records).
+### 4. Add tables at runtime
 
-| Operation | 10k Records | Average per-record |
-| :--- | :--- | :--- |
-| **Bulk Ingestion** | **~130ms** | 0.013ms |
-| **Sync Queue Drain** | **~2ms** | < 0.01ms |
-| **Delta Pulling** | **< 1ms** | ~0ms |
-| **PII Redaction Layer**| **Elite** | Secure by Default |
+```dart
+await sync.addTable('categories');              // pulls immediately
+await sync.addTable('tags', pull: false);       // register only
+sync.removeTable('deprecated_table');           // stop syncing
+```
 
-*Tested on a standard mobile hardware simulation with encrypted storage backend.*
+### 5. Logout
 
----
-
-## 📚 Reference & Guides
-
-For deep-dives into the engine's internals and security protocols:
-
-*   **[🚀 Getting Started Tutorial](doc/getting_started.md)**: Build a high-scale sync engine in 5 minutes.
-*   **[🏟️ Architecture Specification](doc/architecture.md)**: Understanding Delta Pulling and the Ordered Ingestion Protocol.
-*   **[🛡️ Security Audit Report](doc/security_audit.md)**: Deep-dive into the 42 attack vectors and current hardening state.
-*   **[❓ Common Questions & FAQ](doc/faq.md)**: Troubleshooting, performance, and best practices.
-*   **[🤝 Contributing Guide](CONTRIBUTING.md)**: How to add new adapters or features while maintaining Diamond quality.
+```dart
+await sync.logout();  // wipes queue, local data, timestamps
+```
 
 ---
 
-## 🏛️ Licensing & Open Source
+## API reference
 
-`dynos_sync` is a **Fully Open Source** project released under the **MIT License**. 
+### SyncEngine
 
-*   **Commercial Use**: Unlimited and free for all entities.
-*   **Modifications**: Fully permitted.
-*   **Public Release**: Now achieves a **100/100 Points Score** on pub.dev.
+| Method | Description |
+|---|---|
+| `write(table, id, data)` | Write locally + queue for sync |
+| `remove(table, id)` | Delete locally + queue deletion |
+| `push(table, id, data, {operation})` | Queue sync without local write (for custom DAOs) |
+| `drain()` | Push all pending queue entries to remote |
+| `pullAll()` | Delta-pull changes from remote for all registered tables |
+| `syncAll()` | Full cycle: `drain()` then `pullAll()` |
+| `addTable(table, {pull})` | Register a new table at runtime, optionally pull immediately |
+| `removeTable(table)` | Unregister a table from sync |
+| `logout()` | Wipe all local sync state (queue, data, timestamps) |
+| `dispose()` | Close the event stream |
+
+| Property | Type | Description |
+|---|---|---|
+| `tables` | `List<String>` | Currently registered tables (unmodifiable) |
+| `events` | `Stream<SyncEvent>` | Broadcast stream of sync lifecycle events |
+| `isDraining` | `bool` | Whether `drain()` is currently executing |
+| `initialSyncDone` | `Future<void>` | Completes after first `syncAll()` finishes |
+| `userId` | `String?` | Current authenticated user for RLS checks |
+| `config` | `SyncConfig` | Engine configuration |
+
+### SyncConfig
+
+| Parameter | Default | Description |
+|---|---|---|
+| `batchSize` | `50` | Max entries to drain per cycle |
+| `queueRetention` | `30 days` | How long to keep synced entries before purging |
+| `stopOnFirstError` | `true` | Stop drain on first failure vs skip and continue |
+| `maxRetries` | `3` | Retries before dropping a poison pill entry |
+| `sensitiveFields` | `[]` | Field names to mask with `[REDACTED]` |
+| `useExponentialBackoff` | `true` | Enable 2^n retry delays |
+| `conflictStrategy` | `lastWriteWins` | How to resolve local vs remote conflicts |
+| `onConflict` | `null` | Custom conflict resolver (required when strategy is `custom`) |
+| `maxPayloadBytes` | `1 MB` | Max payload size before rejection |
+| `maxBackoff` | `60s` | Cap on exponential backoff duration |
+
+### Events
+
+| Event | Fields | When |
+|---|---|---|
+| `SyncDrainComplete` | `timestamp` | After `drain()` finishes |
+| `SyncPullComplete` | `timestamp`, `table`, `rowCount` | After pulling a table |
+| `SyncAuthRequired` | `timestamp`, `error` | Auth token expired during sync |
+| `SyncConflict` | `timestamp`, `table`, `recordId`, `localVersion`, `remoteVersion`, `resolvedVersion`, `strategyUsed` | Conflict resolved |
+| `SyncPoisonPill` | `timestamp`, `entry` | Entry permanently dropped |
+| `SyncRetryScheduled` | `timestamp`, `entry`, `nextRetryAt` | Retry scheduled with backoff |
+| `SyncError` | `timestamp`, `error`, `context` | Non-fatal error during sync |
+
+### Exceptions
+
+| Exception | When |
+|---|---|
+| `AuthExpiredException` | Remote returns 401/403 |
+| `PayloadTooLargeException` | Payload exceeds `maxPayloadBytes` |
+| `RlsViolationException` | Pulled row has wrong `user_id` |
+| `SyncRemoteException` | Remote returns an error response |
+| `SyncDeserializationException` | Failed to parse remote response |
+
+### Store interfaces
+
+Implement these to plug in your database and backend:
+
+```dart
+abstract class LocalStore {
+  Future<void> upsert(String table, String id, Map<String, dynamic> data);
+  Future<void> delete(String table, String id);
+  Future<void> clearAll(List<String> tables);
+}
+
+abstract class RemoteStore {
+  Future<void> push(String table, String id, SyncOperation op, Map<String, dynamic> data);
+  Future<void> pushBatch(List<SyncEntry> entries);  // default: loops push()
+  Future<List<Map<String, dynamic>>> pullSince(String table, DateTime since);
+  Future<Map<String, DateTime>> getRemoteTimestamps();
+}
+
+abstract class QueueStore { /* enqueue, getPending, markSynced, ... */ }
+abstract class TimestampStore { /* get, set */ }
+```
+
+**Bundled adapters:** `DriftLocalStore`, `DriftQueueStore`, `DriftTimestampStore`, `SupabaseRemoteStore`.
 
 ---
 
-*Engineered with 🛡️ by the [dynos.fit](https://dynos.fit) team.*
+## Performance
+
+Benchmarked with in-memory stores on standard hardware:
+
+| Operation | 10k records | 100k records |
+|---|---|---|
+| **Bulk write** | ~130ms | ~1,400ms |
+| **Queue drain** | ~2ms | ~3ms |
+| **Delta pull** | < 1ms | ~3ms |
+| **PII masking overhead** | ~4ms | ~44ms |
+
+---
+
+## Security
+
+The engine passes a **130-test security audit** across 12 categories:
+
+- HIPAA & health data compliance (PHI masking, audit trail, session timeout)
+- Cross-user data isolation (full wipe on logout)
+- Injection prevention (SQL, NoSQL, XSS, path traversal stored as literals)
+- Auth & RLS enforcement (local user_id gate, auth expiry events)
+- Conflict resolution integrity (deterministic, all strategies tested)
+- Flood resilience (100k parallel writes, drain lock)
+- OWASP Mobile Top 10 coverage
+- GDPR compliance (right to erasure, data minimization)
+
+See [Security Audit Report](doc/security_audit.md) for details.
+
+---
+
+## Documentation
+
+- [Architecture](doc/architecture.md) -- sync protocol, write path, pull path, security gates
+- [Security Audit](doc/security_audit.md) -- 130-test audit across 12 categories
+- [API example](example/example.dart) -- complete Drift + Supabase setup
+- [Security Policy](SECURITY.md) -- vulnerability reporting
+
+---
+
+## License
+
+MIT -- see [LICENSE](LICENSE).
+
+*Built by the [dynos.fit](https://dynos.fit) team.*
