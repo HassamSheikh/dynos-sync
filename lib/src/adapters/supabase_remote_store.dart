@@ -6,7 +6,7 @@ import '../sync_entry.dart';
 
 /// [RemoteStore] implementation using Supabase Postgrest.
 ///
-/// Pushes records via `.upsert()` / `.delete()` and pulls via
+/// Pushes records via `.upsert()` / `.update()` / `.delete()` and pulls via
 /// `.select().gt('updated_at', since)`.
 ///
 /// ## Smart Sync Gate
@@ -60,6 +60,8 @@ class SupabaseRemoteStore implements RemoteStore {
           await client.from(table).upsert(data);
         case SyncOperation.delete:
           await client.from(table).delete().eq('id', id);
+        case SyncOperation.patch:
+          await client.from(table).update(data).eq('id', id);
       }
     } on AuthException catch (e) {
       throw AuthExpiredException(e);
@@ -97,6 +99,17 @@ class SupabaseRemoteStore implements RemoteStore {
         if (deletes != null && deletes.isNotEmpty) {
           final ids = deletes.map((e) => e.recordId).toList();
           await client.from(tableName).delete().inFilter('id', ids);
+        }
+
+        // Batch Patches (individual updates — Supabase has no batch update)
+        final patches = opsMap[SyncOperation.patch];
+        if (patches != null && patches.isNotEmpty) {
+          for (final entry in patches) {
+            await client
+                .from(tableName)
+                .update(entry.payload)
+                .eq('id', entry.recordId);
+          }
         }
       }
     } on AuthException catch (e) {

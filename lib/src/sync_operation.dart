@@ -5,4 +5,10 @@ enum SyncOperation {
 
   /// Delete a record from the remote server.
   delete,
+
+  /// Partial update of an existing record on the remote server.
+  ///
+  /// Unlike [upsert], this sends only the changed fields via an UPDATE
+  /// statement, avoiding NOT NULL constraint failures from missing columns.
+  patch,
 }

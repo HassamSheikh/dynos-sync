@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.1.5 (2026-03-22)
+*   **Patch operation**: Added `SyncOperation.patch` for partial updates. Sends UPDATE instead of upsert, avoiding NOT NULL constraint failures when only a few fields change.
+*   Updated `SupabaseRemoteStore` to handle patch in both `push()` and `pushBatch()`.
+
 ## 0.1.4 (2026-03-22)
 *   **100% dartdoc coverage**: Added documentation comments to all 225 public API elements.
 
