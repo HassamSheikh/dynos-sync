@@ -1,4 +1,9 @@
-# 📋 CHANGELOG
+# CHANGELOG
+
+## 0.1.3 (2026-03-22)
+*   **Runtime table management**: `addTable()` and `removeTable()` allow registering/unregistering sync tables after engine creation.
+*   **130-test security audit**: Comprehensive audit across 12 categories (HIPAA, GDPR, OWASP Mobile Top 10, injection, flood testing, chaos engineering, conflict resolution, race conditions, denial of service).
+*   **Updated documentation**: README rewritten with complete API reference. Architecture and security docs rewritten for developers.
 
 ## 0.1.2 (2026-03-21) - Global Open Source Milestone
 *   **License Shift**: Transitioned from BSL-1.1 to **MIT License** for unrestricted public use.

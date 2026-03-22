@@ -107,7 +107,22 @@ Future<void> onUserLogout(SyncEngine sync) async {
   await sync.logout();
 }
 
-// ─── Step 6: Background Isolate Offloading ──────────────────────────────────
+// ─── Step 6: Runtime Table Registration ──────────────────────────────────────
+
+/// Add tables to sync after engine is already running.
+/// Useful for progressive consent or feature flags.
+Future<void> registerNewTable(SyncEngine sync) async {
+  // Register and immediately pull remote data
+  await sync.addTable('categories');
+
+  // Register without pulling (will pull on next syncAll)
+  await sync.addTable('tags', pull: false);
+
+  // Stop syncing a table
+  sync.removeTable('deprecated_table');
+}
+
+// ─── Step 7: Background Isolate Offloading ──────────────────────────────────
 
 /// For massive datasets (10k+ rows), run the sync in a background isolate.
 /// This ensures the primary UI thread remains silky smooth (60/120 FPS).

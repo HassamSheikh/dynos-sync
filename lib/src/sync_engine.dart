@@ -43,19 +43,41 @@ class SyncEngine {
     required this.remote,
     required this.queue,
     required this.timestamps,
-    required this.tables,
+    required List<String> tables,
     this.userId,
     this.config = const SyncConfig(),
     this.onError,
-  });
+  }) : _tables = List<String>.of(tables);
 
   final LocalStore local;
   final RemoteStore remote;
   final QueueStore queue;
   final TimestampStore timestamps;
 
-  /// Tables registered for sync.
-  final List<String> tables;
+  final List<String> _tables;
+
+  /// Tables registered for sync (unmodifiable view).
+  List<String> get tables => List<String>.unmodifiable(_tables);
+
+  /// Register a new table for sync at runtime.
+  ///
+  /// Returns `true` if the table was added, `false` if already registered.
+  /// Optionally pulls remote data for the table immediately when [pull] is
+  /// `true` (the default).
+  Future<bool> addTable(String table, {bool pull = true}) async {
+    if (_tables.contains(table)) return false;
+    _tables.add(table);
+    if (pull) {
+      final since = await timestamps.get(table);
+      await _pullTable(table, since);
+    }
+    return true;
+  }
+
+  /// Unregister a table so it is no longer included in [pullAll] / [logout].
+  ///
+  /// Returns `true` if the table was removed, `false` if it was not registered.
+  bool removeTable(String table) => _tables.remove(table);
 
   /// Engine configuration.
   final SyncConfig config;
