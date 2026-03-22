@@ -206,12 +206,13 @@ SyncEngine createEngine({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void main() {
-
   // ═══════════════════════════════════════════════════════════════════════════
   // CATEGORY 1 — HIPAA & HEALTH DATA COMPLIANCE (Tests 1-12)
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 1 — HIPAA & HEALTH DATA COMPLIANCE', () {
-    test('1. PHI at rest encryption — sensitiveFields config exists and is configurable', () {
+    test(
+        '1. PHI at rest encryption — sensitiveFields config exists and is configurable',
+        () {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -219,7 +220,13 @@ void main() {
       // At-rest encryption is delegated to the LocalStore implementation (e.g., SQLCipher),
       // but the engine must provide a config surface for marking fields as sensitive.
       const config = SyncConfig(
-        sensitiveFields: ['diagnosis', 'ssn', 'dob', 'medication', 'lab_results'],
+        sensitiveFields: [
+          'diagnosis',
+          'ssn',
+          'dob',
+          'medication',
+          'lab_results'
+        ],
       );
 
       expect(config.sensitiveFields, hasLength(5));
@@ -234,7 +241,9 @@ void main() {
           reason: 'Default config must not assume any fields are sensitive');
     });
 
-    test('2. PHI in transit — push happens through RemoteStore interface, no raw HTTP', () async {
+    test(
+        '2. PHI in transit — push happens through RemoteStore interface, no raw HTTP',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -262,7 +271,9 @@ void main() {
       engine.dispose();
     });
 
-    test('3. PHI in sync payloads — sensitiveFields masks health data before push', () async {
+    test(
+        '3. PHI in sync payloads — sensitiveFields masks health data before push',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -303,14 +314,17 @@ void main() {
       engine.dispose();
     });
 
-    test('4. PHI in error messages — failure with health data does not expose raw values', () async {
+    test(
+        '4. PHI in error messages — failure with health data does not expose raw values',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
       final errorContexts = <String>[];
       final errorObjects = <Object>[];
       final remote = ConfigurableRemoteStore();
-      remote.onPush = (_, __, ___, ____) async => throw Exception('Server error');
+      remote.onPush =
+          (_, __, ___, ____) async => throw Exception('Server error');
       remote.onPushBatch = (_) async => throw Exception('Batch error');
 
       final engine = createEngine(
@@ -347,12 +361,15 @@ void main() {
       // Verify [REDACTED] appears in drain error contexts
       final drainCtx = errorContexts.where((c) => c.contains('drain'));
       expect(drainCtx.any((c) => c.contains('[REDACTED]')), isTrue,
-          reason: 'Drain error context must contain [REDACTED] for masked fields');
+          reason:
+              'Drain error context must contain [REDACTED] for masked fields');
 
       engine.dispose();
     });
 
-    test('5. PHI in crash reports — onError callback receives masked data, not raw PHI', () async {
+    test(
+        '5. PHI in crash reports — onError callback receives masked data, not raw PHI',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -391,7 +408,9 @@ void main() {
       engine.dispose();
     });
 
-    test('6. Audit trail exists — events stream emits for push, pull, conflict, delete', () async {
+    test(
+        '6. Audit trail exists — events stream emits for push, pull, conflict, delete',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA
 
@@ -401,11 +420,11 @@ void main() {
       // Let best-effort push succeed
       remote.onPush = (_, __, ___, ____) async {};
       remote.onPullSince = (table, since) async => [
-        {'id': 'r1', 'title': 'Remote row'},
-      ];
+            {'id': 'r1', 'title': 'Remote row'},
+          ];
       remote.onGetRemoteTimestamps = () async => {
-        'tasks': DateTime.now().toUtc(),
-      };
+            'tasks': DateTime.now().toUtc(),
+          };
 
       final engine = createEngine(remote: remote, tables: ['tasks']);
       engine.events.listen(events.add);
@@ -433,13 +452,16 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       // At least 2 drain completes (one from first drain, one from delete drain)
-      expect(events.whereType<SyncDrainComplete>().length, greaterThanOrEqualTo(2),
+      expect(
+          events.whereType<SyncDrainComplete>().length, greaterThanOrEqualTo(2),
           reason: 'Delete operations must also produce drain audit events');
 
       engine.dispose();
     });
 
-    test('7. Audit trail tamper-resistant — events stream is broadcast, no public clear method', () {
+    test(
+        '7. Audit trail tamper-resistant — events stream is broadcast, no public clear method',
+        () {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA
 
@@ -448,7 +470,8 @@ void main() {
       // events getter returns a broadcast stream (multiple listeners allowed)
       final stream = engine.events;
       expect(stream.isBroadcast, isTrue,
-          reason: 'Events stream must be broadcast for multiple audit subscribers');
+          reason:
+              'Events stream must be broadcast for multiple audit subscribers');
 
       // Verify there is no public method to clear, reset, or modify the event stream.
       // SyncEngine public API: write, remove, push, drain, pullAll, syncAll,
@@ -461,7 +484,9 @@ void main() {
       engine.dispose();
     });
 
-    test('8. Data retention & deletion — logout() clears queue, local, timestamps', () async {
+    test(
+        '8. Data retention & deletion — logout() clears queue, local, timestamps',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -509,7 +534,9 @@ void main() {
       engine.dispose();
     });
 
-    test('9. Automatic session timeout — AuthExpiredException surfaces re-auth event', () async {
+    test(
+        '9. Automatic session timeout — AuthExpiredException surfaces re-auth event',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -526,14 +553,17 @@ void main() {
 
       final authEvents = events.whereType<SyncAuthRequired>().toList();
       expect(authEvents, isNotEmpty,
-          reason: 'AuthExpiredException must surface as SyncAuthRequired event');
+          reason:
+              'AuthExpiredException must surface as SyncAuthRequired event');
       expect(authEvents.first.error, isA<AuthExpiredException>(),
           reason: 'Event must carry the original AuthExpiredException');
 
       engine.dispose();
     });
 
-    test('10. De-identification — sensitiveFields masking removes identifiers before sync', () async {
+    test(
+        '10. De-identification — sensitiveFields masking removes identifiers before sync',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA
 
@@ -548,8 +578,14 @@ void main() {
         tables: ['patients'],
         config: const SyncConfig(
           sensitiveFields: [
-            'first_name', 'last_name', 'ssn', 'dob', 'email',
-            'phone', 'address', 'medical_record_number',
+            'first_name',
+            'last_name',
+            'ssn',
+            'dob',
+            'email',
+            'phone',
+            'address',
+            'medical_record_number',
           ],
         ),
       );
@@ -575,8 +611,14 @@ void main() {
 
       // All 8 identifier fields must be redacted
       for (final field in [
-        'first_name', 'last_name', 'ssn', 'dob',
-        'email', 'phone', 'address', 'medical_record_number',
+        'first_name',
+        'last_name',
+        'ssn',
+        'dob',
+        'email',
+        'phone',
+        'address',
+        'medical_record_number',
       ]) {
         expect(pushed[field], '[REDACTED]',
             reason: '$field must be de-identified before sync');
@@ -595,7 +637,9 @@ void main() {
       engine.dispose();
     });
 
-    test('11. Backup encryption — engine is stateless, creates no temp files (structural)', () {
+    test(
+        '11. Backup encryption — engine is stateless, creates no temp files (structural)',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: HIPAA
 
@@ -615,7 +659,9 @@ void main() {
       engine.dispose();
     });
 
-    test('12. Screenshot protection — engine is backend-only, no UI widgets (structural)', () {
+    test(
+        '12. Screenshot protection — engine is backend-only, no UI widgets (structural)',
+        () {
       // SEVERITY: LOW
       // COMPLIANCE: HIPAA
 
@@ -639,7 +685,8 @@ void main() {
   // CATEGORY 2 — DATA LEAK TESTING (Tests 13-25)
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 2 — DATA LEAK TESTING', () {
-    test('13. Cross-user data isolation — full table scan after logout', () async {
+    test('13. Cross-user data isolation — full table scan after logout',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2
 
@@ -702,7 +749,8 @@ void main() {
       engineB.dispose();
     });
 
-    test('14. Sync queue leak on logout — zero records pushed after logout', () async {
+    test('14. Sync queue leak on logout — zero records pushed after logout',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2
 
@@ -746,7 +794,9 @@ void main() {
       engine.dispose();
     });
 
-    test('15. Realtime channel leak — engine has no Realtime dependency (structural)', () {
+    test(
+        '15. Realtime channel leak — engine has no Realtime dependency (structural)',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: SOC2
 
@@ -763,7 +813,9 @@ void main() {
       engine.dispose();
     });
 
-    test('16. Memory: after processing, no health data retained in engine public properties', () async {
+    test(
+        '16. Memory: after processing, no health data retained in engine public properties',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA
 
@@ -803,7 +855,9 @@ void main() {
       engine.dispose();
     });
 
-    test('17. Clipboard leak — engine has no clipboard functionality (structural)', () {
+    test(
+        '17. Clipboard leak — engine has no clipboard functionality (structural)',
+        () {
       // SEVERITY: LOW
       // COMPLIANCE: HIPAA
 
@@ -832,7 +886,9 @@ void main() {
       engine.dispose();
     });
 
-    test('19. Network request metadata leak — pushed payloads contain only user data, no device metadata', () async {
+    test(
+        '19. Network request metadata leak — pushed payloads contain only user data, no device metadata',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA, GDPR
 
@@ -849,9 +905,17 @@ void main() {
 
       // The engine must not inject device metadata into payloads
       final forbiddenKeys = [
-        'device_id', 'device_name', 'os_version', 'app_version',
-        'ip_address', 'user_agent', 'latitude', 'longitude',
-        'mac_address', 'imei', 'carrier',
+        'device_id',
+        'device_name',
+        'os_version',
+        'app_version',
+        'ip_address',
+        'user_agent',
+        'latitude',
+        'longitude',
+        'mac_address',
+        'imei',
+        'carrier',
       ];
 
       for (final key in forbiddenKeys) {
@@ -866,14 +930,17 @@ void main() {
       engine.dispose();
     });
 
-    test('20. Debug mode exposure — even with verbose onError, sensitiveFields are masked', () async {
+    test(
+        '20. Debug mode exposure — even with verbose onError, sensitiveFields are masked',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA
 
       final allErrors = <String>[];
       final allStackTraces = <StackTrace>[];
       final remote = ConfigurableRemoteStore();
-      remote.onPush = (_, __, ___, ____) async => throw Exception('Debug error');
+      remote.onPush =
+          (_, __, ___, ____) async => throw Exception('Debug error');
       remote.onPushBatch = (_) async => throw Exception('Batch debug error');
 
       final engine = createEngine(
@@ -909,7 +976,9 @@ void main() {
       engine.dispose();
     });
 
-    test('21. SharedPreferences leak — engine uses no SharedPreferences (structural)', () {
+    test(
+        '21. SharedPreferences leak — engine uses no SharedPreferences (structural)',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: SOC2
 
@@ -924,7 +993,9 @@ void main() {
       engine.dispose();
     });
 
-    test('22. Platform channel leak — engine uses no MethodChannel (structural)', () {
+    test(
+        '22. Platform channel leak — engine uses no MethodChannel (structural)',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: SOC2
 
@@ -939,7 +1010,9 @@ void main() {
       engine.dispose();
     });
 
-    test('23. Notification payload leak — events do not contain raw PHI when sensitiveFields configured', () async {
+    test(
+        '23. Notification payload leak — events do not contain raw PHI when sensitiveFields configured',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: HIPAA
 
@@ -980,13 +1053,15 @@ void main() {
         expect(event.entry.payload['diagnosis'], '[REDACTED]',
             reason: 'Poison pill entry payload must have masked diagnosis');
         expect(event.entry.payload['treatment_plan'], '[REDACTED]',
-            reason: 'Poison pill entry payload must have masked treatment plan');
+            reason:
+                'Poison pill entry payload must have masked treatment plan');
       }
 
       engine.dispose();
     });
 
-    test('24. Export functionality — engine has no export feature (structural)', () {
+    test('24. Export functionality — engine has no export feature (structural)',
+        () {
       // SEVERITY: LOW
       // COMPLIANCE: HIPAA, GDPR
 
@@ -1002,7 +1077,9 @@ void main() {
       engine.dispose();
     });
 
-    test('25. iCloud backup exclusion — engine delegates storage to LocalStore interface (structural)', () {
+    test(
+        '25. iCloud backup exclusion — engine delegates storage to LocalStore interface (structural)',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: HIPAA
 
@@ -1023,7 +1100,9 @@ void main() {
   // CATEGORY 3 — INJECTION & INPUT VALIDATION (Tests 26-37)
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 3 — INJECTION & INPUT VALIDATION', () {
-    test('26. SQL injection via record fields — multiple injection vectors stored as literals', () async {
+    test(
+        '26. SQL injection via record fields — multiple injection vectors stored as literals',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: OWASP
 
@@ -1058,13 +1137,15 @@ void main() {
       final payload = entries.first.payload;
       for (final entry in injectionVectors.entries) {
         expect(payload[entry.key], equals(entry.value),
-            reason: '${entry.key} injection vector must be stored as literal string');
+            reason:
+                '${entry.key} injection vector must be stored as literal string');
       }
 
       engine.dispose();
     });
 
-    test('27. NoSQL injection — operator injection patterns stored as literals', () async {
+    test('27. NoSQL injection — operator injection patterns stored as literals',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: OWASP
 
@@ -1108,7 +1189,9 @@ void main() {
       engine.dispose();
     });
 
-    test('28. XSS via sync data — HTML/script tags stored as-is (engine does not render)', () async {
+    test(
+        '28. XSS via sync data — HTML/script tags stored as-is (engine does not render)',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: OWASP
 
@@ -1152,7 +1235,9 @@ void main() {
       engine.dispose();
     });
 
-    test('29. Path traversal — traversal strings stored as literals (engine does not use filesystem)', () async {
+    test(
+        '29. Path traversal — traversal strings stored as literals (engine does not use filesystem)',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: OWASP
 
@@ -1189,7 +1274,9 @@ void main() {
       engine.dispose();
     });
 
-    test('30. Oversized payload — 50MB single field triggers PayloadTooLargeException', () async {
+    test(
+        '30. Oversized payload — 50MB single field triggers PayloadTooLargeException',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: NIST
 
@@ -1211,7 +1298,9 @@ void main() {
       engine.dispose();
     });
 
-    test('31. Oversized batch — 100K records queued successfully (engine handles via batching)', () async {
+    test(
+        '31. Oversized batch — 100K records queued successfully (engine handles via batching)',
+        () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: NIST
 
@@ -1230,7 +1319,8 @@ void main() {
       );
 
       // Queue 100K records via push (lighter than write, no local upsert needed)
-      const recordCount = 1000; // Use 1000 for test speed; principle applies to 100K
+      const recordCount =
+          1000; // Use 1000 for test speed; principle applies to 100K
       for (var i = 0; i < recordCount; i++) {
         await engine.push('tasks', 'task-$i', {'idx': i});
       }
@@ -1287,7 +1377,8 @@ void main() {
       engine.dispose();
     });
 
-    test('33. Unicode edge cases — emoji, RTL, ZWJ survive round-trip', () async {
+    test('33. Unicode edge cases — emoji, RTL, ZWJ survive round-trip',
+        () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: NIST
 
@@ -1304,11 +1395,14 @@ void main() {
 
       final unicodePayload = {
         'emoji': '\u{1F4AA}\u{1F3FD}', // flexed biceps medium skin tone
-        'family_zwj': '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}', // family ZWJ sequence
-        'rtl_arabic': '\u0645\u0631\u062D\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645',
+        'family_zwj':
+            '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}', // family ZWJ sequence
+        'rtl_arabic':
+            '\u0645\u0631\u062D\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645',
         'rtl_hebrew': '\u05E9\u05DC\u05D5\u05DD',
         'cjk': '\u4F60\u597D\u4E16\u754C',
-        'zalgo': 'H\u0335\u0321\u033Be\u0336\u031E\u0319l\u0334\u0325\u031Fl\u0335\u031F\u0324o\u0334\u031E',
+        'zalgo':
+            'H\u0335\u0321\u033Be\u0336\u031E\u0319l\u0334\u0325\u031Fl\u0335\u031F\u0324o\u0334\u031E',
         'zero_width': 'a\u200Bb\u200Cc\u200Dd\uFEFF',
         'surrogate_pair': '\u{1F600}\u{1F601}\u{1F602}',
         'combining_marks': 'e\u0301\u0327', // e with acute and cedilla
@@ -1376,7 +1470,8 @@ void main() {
       engine.dispose();
     });
 
-    test('35. Deeply nested JSON — 100 levels of nesting handled without crash', () async {
+    test('35. Deeply nested JSON — 100 levels of nesting handled without crash',
+        () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: NIST
 
@@ -1389,7 +1484,8 @@ void main() {
         queue: InMemoryQueueStore(),
         timestamps: InMemoryTimestampStore(),
         tables: ['tasks'],
-        config: const SyncConfig(maxPayloadBytes: 10 * 1024 * 1024), // 10MB to allow nesting
+        config: const SyncConfig(
+            maxPayloadBytes: 10 * 1024 * 1024), // 10MB to allow nesting
       );
 
       // Build 100 levels of nesting
@@ -1416,7 +1512,9 @@ void main() {
       engine.dispose();
     });
 
-    test('36. Malformed JSON from server — engine emits SyncError, does not crash', () async {
+    test(
+        '36. Malformed JSON from server — engine emits SyncError, does not crash',
+        () async {
       // SEVERITY: HIGH
       // COMPLIANCE: OWASP
 
@@ -1425,8 +1523,8 @@ void main() {
       remote.onPullSince = (table, since) async =>
           throw const FormatException('Unexpected character at position 0');
       remote.onGetRemoteTimestamps = () async => {
-        'tasks': DateTime.now().toUtc(),
-      };
+            'tasks': DateTime.now().toUtc(),
+          };
 
       final engine = createEngine(remote: remote, tables: ['tasks']);
       engine.events.listen(events.add);
@@ -1446,7 +1544,9 @@ void main() {
       engine.dispose();
     });
 
-    test('37. CSV injection — formula-prefixed values stored as-is (engine is not a CSV exporter)', () async {
+    test(
+        '37. CSV injection — formula-prefixed values stored as-is (engine is not a CSV exporter)',
+        () async {
       // SEVERITY: LOW
       // COMPLIANCE: OWASP
 
@@ -1477,7 +1577,8 @@ void main() {
       expect(stored, isNotNull);
       for (final entry in csvInjectionVectors.entries) {
         expect(stored![entry.key], equals(entry.value),
-            reason: '${entry.key} CSV injection vector must be stored verbatim');
+            reason:
+                '${entry.key} CSV injection vector must be stored verbatim');
       }
 
       engine.dispose();
@@ -1488,7 +1589,9 @@ void main() {
   // CATEGORY 4 — AUTHENTICATION & AUTHORIZATION (Tests 38-47)
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 4 — AUTHENTICATION & AUTHORIZATION', () {
-    test('38. Expired token mid-sync — AuthExpiredException during drain stops and preserves remaining', () async {
+    test(
+        '38. Expired token mid-sync — AuthExpiredException during drain stops and preserves remaining',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2
 
@@ -1545,7 +1648,9 @@ void main() {
       engine.dispose();
     });
 
-    test('39. Unauthenticated sync — engine works with null userId (no auth required at engine level)', () async {
+    test(
+        '39. Unauthenticated sync — engine works with null userId (no auth required at engine level)',
+        () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: SOC2
 
@@ -1576,8 +1681,7 @@ void main() {
         'title': 'Anonymous Task',
       });
 
-      expect(pushed.length, 2,
-          reason: 'Both writes must succeed without auth');
+      expect(pushed.length, 2, reason: 'Both writes must succeed without auth');
       expect(engine.userId, isNull);
 
       engine.dispose();
@@ -1632,7 +1736,9 @@ void main() {
       engine.dispose();
     });
 
-    test('41. Stolen token replay — AuthExpiredException surfaces event, does not retry infinitely', () async {
+    test(
+        '41. Stolen token replay — AuthExpiredException surfaces event, does not retry infinitely',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2, NIST
 
@@ -1677,7 +1783,9 @@ void main() {
       engine.dispose();
     });
 
-    test('42. RLS enforcement — write with mismatched userId throws [RLS_Bypass]', () async {
+    test(
+        '42. RLS enforcement — write with mismatched userId throws [RLS_Bypass]',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2
 
@@ -1728,7 +1836,8 @@ void main() {
       engine.dispose();
     });
 
-    test('43. Post-logout token purge — queue, local, timestamps all wiped', () async {
+    test('43. Post-logout token purge — queue, local, timestamps all wiped',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: HIPAA, SOC2
 
@@ -1776,7 +1885,9 @@ void main() {
       engine.dispose();
     });
 
-    test('44. Privilege escalation via payload — sensitiveFields strips unauthorized fields like isAdmin', () async {
+    test(
+        '44. Privilege escalation via payload — sensitiveFields strips unauthorized fields like isAdmin',
+        () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: OWASP, SOC2
 
@@ -1810,8 +1921,7 @@ void main() {
       // Privilege escalation fields must be redacted
       expect(pushed['isAdmin'], '[REDACTED]',
           reason: 'isAdmin must be redacted to prevent privilege escalation');
-      expect(pushed['role'], '[REDACTED]',
-          reason: 'role must be redacted');
+      expect(pushed['role'], '[REDACTED]', reason: 'role must be redacted');
       expect(pushed['permissions'], '[REDACTED]',
           reason: 'permissions must be redacted');
       expect(pushed['access_level'], '[REDACTED]',
@@ -1823,7 +1933,9 @@ void main() {
       engine.dispose();
     });
 
-    test('45. Biometric gate — structural: engine delegates auth to RemoteStore', () {
+    test(
+        '45. Biometric gate — structural: engine delegates auth to RemoteStore',
+        () {
       // SEVERITY: MEDIUM
       // COMPLIANCE: HIPAA
 
@@ -1849,7 +1961,9 @@ void main() {
       engine.dispose();
     });
 
-    test('46. API key exposure — structural: engine takes interfaces, no hardcoded keys', () {
+    test(
+        '46. API key exposure — structural: engine takes interfaces, no hardcoded keys',
+        () {
       // SEVERITY: CRITICAL
       // COMPLIANCE: OWASP, SOC2
 
@@ -1881,7 +1995,9 @@ void main() {
       engine.dispose();
     });
 
-    test('47. Certificate pinning — structural: delegated to HTTP client in RemoteStore', () {
+    test(
+        '47. Certificate pinning — structural: delegated to HTTP client in RemoteStore',
+        () {
       // SEVERITY: HIGH
       // COMPLIANCE: NIST, SOC2
 
@@ -2090,8 +2206,7 @@ void main() {
 
       final resolved = conflicts.last.resolvedVersion;
       // ServerWins: all fields come from remote, nothing is null or empty
-      expect(resolved['name'], 'Bob',
-          reason: 'Server wins: name must be Bob');
+      expect(resolved['name'], 'Bob', reason: 'Server wins: name must be Bob');
       expect(resolved['age'], 25, reason: 'Server wins: age must be 25');
       expect(resolved['bio'], 'Remote bio',
           reason: 'Server wins: bio must be Remote bio');
@@ -2344,8 +2459,7 @@ void main() {
         tables: ['items'],
         config: SyncConfig(
           conflictStrategy: ConflictStrategy.custom,
-          onConflict:
-              (table, recordId, localVersion, remoteVersion) async {
+          onConflict: (table, recordId, localVersion, remoteVersion) async {
             // Three-way merge: for each field, if only one side changed from
             // ancestor, take the changed side. If both changed, prefer remote.
             final merged = <String, dynamic>{};
@@ -2907,7 +3021,8 @@ void main() {
       final pendingIds = pendingAfter.map((e) => e.recordId).toSet();
       for (var i = 0; i < 5; i++) {
         expect(pendingIds, contains('concurrent-$i'),
-            reason: 'Concurrently written records must be in queue for next drain');
+            reason:
+                'Concurrently written records must be in queue for next drain');
       }
 
       // Verify local store has all records (no corruption)
@@ -2944,7 +3059,8 @@ void main() {
       engine.dispose();
     });
 
-    test('69. Cold start sync — measure syncAll() time with 5000 queued records',
+    test(
+        '69. Cold start sync — measure syncAll() time with 5000 queued records',
         () async {
       // SEVERITY: HIGH
       // COMPLIANCE: Performance SLA — cold start latency
@@ -3052,9 +3168,8 @@ void main() {
 
       // At retryCount=9, delay = 2^10 = 1024s, but capped at 60s
       final lastRetry = retryEvents.last;
-      final scheduledDelay = lastRetry.nextRetryAt
-          .difference(lastRetry.timestamp)
-          .inSeconds;
+      final scheduledDelay =
+          lastRetry.nextRetryAt.difference(lastRetry.timestamp).inSeconds;
       expect(scheduledDelay, lessThanOrEqualTo(61),
           reason:
               'Backoff must be capped at maxBackoff (60s), got ${scheduledDelay}s');
@@ -3150,8 +3265,8 @@ void main() {
       final remote = ConfigurableRemoteStore();
 
       // Best-effort push fails with timeout
-      remote.onPush =
-          (_, __, ___, ____) async => throw TimeoutException('Connection timed out');
+      remote.onPush = (_, __, ___, ____) async =>
+          throw TimeoutException('Connection timed out');
       remote.onPushBatch =
           (_) async => throw TimeoutException('Batch timed out');
 
@@ -3182,8 +3297,7 @@ void main() {
           .where((e) => e is SyncError || e is SyncRetryScheduled)
           .toList();
       expect(errorOrRetry, isNotEmpty,
-          reason:
-              'Engine must emit error/retry event on timeout, not crash');
+          reason: 'Engine must emit error/retry event on timeout, not crash');
     });
 
     test('74. Slow network — remote with delay, engine still completes',
@@ -3224,7 +3338,8 @@ void main() {
           reason: 'Drain should take measurable time with slow network');
     });
 
-    test('75. Bandwidth measurement — measure total payload bytes for 1000 records',
+    test(
+        '75. Bandwidth measurement — measure total payload bytes for 1000 records',
         () async {
       // SEVERITY: LOW
       // COMPLIANCE: Observability — bandwidth tracking
@@ -3261,7 +3376,8 @@ void main() {
       expect(totalBytes, greaterThan(50000),
           reason: 'Total bytes for 1000 records should exceed 50KB');
       expect(totalBytes, lessThan(500000),
-          reason: 'Total bytes should be reasonable (< 500KB for 1000 small records)');
+          reason:
+              'Total bytes should be reasonable (< 500KB for 1000 small records)');
 
       // Also verify via remote pushed payloads
       var pushedBytes = 0;
@@ -3294,7 +3410,8 @@ void main() {
       );
 
       // Engine writes through LocalStore.upsert — no encryption in engine layer
-      await engine.write('tasks', 't1', {'title': 'Encrypted at rest by store'});
+      await engine
+          .write('tasks', 't1', {'title': 'Encrypted at rest by store'});
 
       // Structural: engine.local is the injected store, engine adds no crypto layer
       expect(engine.local, isA<LocalStore>(),
@@ -3387,7 +3504,8 @@ void main() {
       expect(engine.config.sensitiveFields, isEmpty,
           reason: 'Default config has no sensitive fields — no key to leak');
       expect(engine.userId, 'user-A',
-          reason: 'userId is immutable (final) but contains no crypto material');
+          reason:
+              'userId is immutable (final) but contains no crypto material');
       engine.dispose();
     });
 
@@ -3449,8 +3567,7 @@ void main() {
       engine.dispose();
     });
 
-    test(
-        '83. Certificate transparency — structural: delegated to HTTP client',
+    test('83. Certificate transparency — structural: delegated to HTTP client',
         () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: OWASP MASVS-NETWORK-2 — certificate pinning
@@ -3479,8 +3596,7 @@ void main() {
   // CATEGORY 8 — RACE CONDITIONS & CONCURRENCY (Tests 84-91)
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 8 — RACE CONDITIONS & CONCURRENCY', () {
-    test(
-        '84. Double-sync prevention — drain lock prevents concurrent drain()',
+    test('84. Double-sync prevention — drain lock prevents concurrent drain()',
         () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: Concurrency Safety — mutex-free drain lock
@@ -3514,7 +3630,8 @@ void main() {
       await Future.wait([a, b]);
 
       expect(drainBatchCount, 1,
-          reason: 'Second drain() must return immediately when _draining is true');
+          reason:
+              'Second drain() must return immediately when _draining is true');
 
       // Verify isDraining is false after both complete
       expect(engine.isDraining, isFalse,
@@ -3546,13 +3663,11 @@ void main() {
       // After write completes:
       // 1. Queue must have the entry
       final pending = await queue.getPendingEntries('tasks', 'atomic-1');
-      expect(pending, isNotEmpty,
-          reason: 'Queue entry must exist after write');
+      expect(pending, isNotEmpty, reason: 'Queue entry must exist after write');
 
       // 2. Local store must have the data
       final localData = local.getData('tasks', 'atomic-1');
-      expect(localData, isNotNull,
-          reason: 'Local data must exist after write');
+      expect(localData, isNotNull, reason: 'Local data must exist after write');
       expect(localData!['title'], 'Atomic Write');
 
       // 3. The queue entry payload must match what was written to local
@@ -3644,8 +3759,7 @@ void main() {
       expect(events2.length, equals(events3.length));
 
       // Verify order: SyncDrainComplete should come after any drain events
-      final drainCompletes1 =
-          events1.whereType<SyncDrainComplete>().toList();
+      final drainCompletes1 = events1.whereType<SyncDrainComplete>().toList();
       expect(drainCompletes1, isNotEmpty,
           reason: 'SyncDrainComplete must be emitted');
 
@@ -3703,8 +3817,7 @@ void main() {
       }
     });
 
-    test(
-        '89. Isolate death — structural: IsolateSyncEngine wraps engine',
+    test('89. Isolate death — structural: IsolateSyncEngine wraps engine',
         () async {
       // SEVERITY: LOW
       // COMPLIANCE: Architecture — isolate lifecycle management
@@ -3827,8 +3940,8 @@ void main() {
       // Simulate remote failure (app "killed" mid-sync)
       remote.onPush = (_, __, ___, ____) async =>
           throw Exception('Connection reset by peer');
-      remote.onPushBatch = (_) async =>
-          throw Exception('Connection reset by peer');
+      remote.onPushBatch =
+          (_) async => throw Exception('Connection reset by peer');
 
       final engine = SyncEngine(
         local: InMemoryLocalStore(),
@@ -3889,8 +4002,7 @@ void main() {
           reason: 'Empty remote response should not upsert any rows');
 
       // SyncPullComplete must be emitted even for empty pulls (rowCount 0)
-      final pullEvents =
-          events.whereType<SyncPullComplete>().toList();
+      final pullEvents = events.whereType<SyncPullComplete>().toList();
       expect(pullEvents, isNotEmpty,
           reason: 'SyncPullComplete should be emitted even for empty pulls');
       expect(pullEvents.first.rowCount, 0,
@@ -3932,7 +4044,8 @@ void main() {
 
       final pending = await queue.getPending(now: DateTime.utc(9999));
       expect(pending, isNotEmpty,
-          reason: 'Entry must remain pending when remote throws SyncRemoteException');
+          reason:
+              'Entry must remain pending when remote throws SyncRemoteException');
       expect(pending.first.isPending, isTrue);
 
       engine.dispose();
@@ -3997,8 +4110,8 @@ void main() {
       final queue = InMemoryQueueStore();
       final remote = ConfigurableRemoteStore();
 
-      remote.onPush = (_, __, ___, ____) async =>
-          throw Exception('429 Too Many Requests');
+      remote.onPush =
+          (_, __, ___, ____) async => throw Exception('429 Too Many Requests');
       remote.onPushBatch =
           (_) async => throw Exception('429 Too Many Requests');
 
@@ -4021,8 +4134,7 @@ void main() {
 
       // Entry should still be pending
       final pending = await queue.getPending(now: DateTime.utc(9999));
-      expect(pending, isNotEmpty,
-          reason: 'Record must not be dropped on 429');
+      expect(pending, isNotEmpty, reason: 'Record must not be dropped on 429');
 
       // SyncRetryScheduled event should have been emitted
       final retryEvents = events.whereType<SyncRetryScheduled>().toList();
@@ -4198,8 +4310,7 @@ void main() {
       final remote = ConfigurableRemoteStore();
 
       // Simulate offline: all pushes fail
-      remote.onPush =
-          (_, __, ___, ____) async => throw Exception('No network');
+      remote.onPush = (_, __, ___, ____) async => throw Exception('No network');
       remote.onPushBatch = (_) async => throw Exception('No network');
 
       final engine = SyncEngine(
@@ -4261,7 +4372,8 @@ void main() {
       expect(remaining, isEmpty,
           reason: 'All 1500 records must eventually sync');
       expect(drainCycles, greaterThan(1),
-          reason: 'Multiple drain cycles needed for 1500 records at batchSize=50');
+          reason:
+              'Multiple drain cycles needed for 1500 records at batchSize=50');
 
       engine.dispose();
     });
@@ -4438,8 +4550,7 @@ void main() {
 
       final remote = ConfigurableRemoteStore();
       // Make remote push fail silently so it doesn't mark as synced
-      remote.onPush =
-          (_, __, ___, ____) async => throw Exception('No network');
+      remote.onPush = (_, __, ___, ____) async => throw Exception('No network');
 
       final engine = SyncEngine(
         local: trackingLocal,
@@ -4482,7 +4593,8 @@ void main() {
       final powerLossEntries =
           queue.allEntries.where((e) => e.recordId == 'power-loss');
       expect(powerLossEntries, isNotEmpty,
-          reason: 'Queue entry must survive local write failure (enqueue-first ordering)');
+          reason:
+              'Queue entry must survive local write failure (enqueue-first ordering)');
 
       engine.dispose();
       failEngine.dispose();
@@ -4608,7 +4720,8 @@ void main() {
       // This is the key invariant preventing sync loops
       final afterPull = queue.allEntries.length;
       expect(afterPull, beforePull,
-          reason: 'pullAll must not enqueue entries (would cause infinite sync loop)');
+          reason:
+              'pullAll must not enqueue entries (would cause infinite sync loop)');
 
       // Verify data was written locally (pull did work)
       expect(local.getData('tasks', 'r1'), isNotNull,
@@ -4667,8 +4780,7 @@ void main() {
       engine.dispose();
     });
 
-    test(
-        '110. Malicious record with deeply nested map — jsonEncode handles it',
+    test('110. Malicious record with deeply nested map — jsonEncode handles it',
         () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: OWASP-M4
@@ -4703,13 +4815,13 @@ void main() {
       // Engine should still be functional after the attempt
       await engine.write('tasks', 'normal-1', {'title': 'Normal record'});
       expect(queue.allEntries.any((e) => e.recordId == 'normal-1'), isTrue,
-          reason: 'Engine must remain functional after handling nested payload');
+          reason:
+              'Engine must remain functional after handling nested payload');
 
       engine.dispose();
     });
 
-    test(
-        '111. Rapid login/logout cycling — 1000 cycles, no resource leak',
+    test('111. Rapid login/logout cycling — 1000 cycles, no resource leak',
         () async {
       // SEVERITY: HIGH
       // COMPLIANCE: SOC2, NIST
@@ -4742,8 +4854,7 @@ void main() {
           reason: 'Timestamps must be epoch after logout cycle');
     });
 
-    test(
-        '112. Stale sync worker — after dispose(), events stream is closed',
+    test('112. Stale sync worker — after dispose(), events stream is closed',
         () async {
       // SEVERITY: HIGH
       // COMPLIANCE: SOC2
@@ -4908,8 +5019,7 @@ void main() {
   // CATEGORY 11 — OWASP MOBILE TOP 10
   // ═══════════════════════════════════════════════════════════════════════════
   group('CATEGORY 11 — OWASP MOBILE TOP 10', () {
-    test(
-        '115. M1 Improper Credential Storage — engine stores no credentials',
+    test('115. M1 Improper Credential Storage — engine stores no credentials',
         () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: OWASP-M1, SOC2, HIPAA
@@ -4941,9 +5051,7 @@ void main() {
       engine.dispose();
     });
 
-    test(
-        '116. M2 Supply Chain — structural: minimal dependencies',
-        () async {
+    test('116. M2 Supply Chain — structural: minimal dependencies', () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: OWASP-M2
       // dynos_sync depends on: uuid, meta, drift, supabase_flutter
@@ -5009,8 +5117,8 @@ void main() {
       // Simulate auth failure
       remote.onPush = (_, __, ___, ____) async =>
           throw const AuthExpiredException('Token expired');
-      remote.onPushBatch = (_) async =>
-          throw const AuthExpiredException('Token expired');
+      remote.onPushBatch =
+          (_) async => throw const AuthExpiredException('Token expired');
 
       await engine.drain();
 
@@ -5194,8 +5302,7 @@ void main() {
       engine.dispose();
     });
 
-    test(
-        '121. M7 Binary Protections — structural: no secrets in engine code',
+    test('121. M7 Binary Protections — structural: no secrets in engine code',
         () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: OWASP-M7
@@ -5220,8 +5327,7 @@ void main() {
       engine.dispose();
     });
 
-    test(
-        '122. M8 Security Misconfiguration — default config is secure',
+    test('122. M8 Security Misconfiguration — default config is secure',
         () async {
       // SEVERITY: MEDIUM
       // COMPLIANCE: OWASP-M8, SOC2
@@ -5367,9 +5473,12 @@ void main() {
       );
 
       // Populate data across all tables
-      await engine.write('tasks', 't1', {'title': 'Task 1', 'user_id': 'gdpr-user'});
-      await engine.write('tasks', 't2', {'title': 'Task 2', 'user_id': 'gdpr-user'});
-      await engine.write('notes', 'n1', {'body': 'Note 1', 'user_id': 'gdpr-user'});
+      await engine
+          .write('tasks', 't1', {'title': 'Task 1', 'user_id': 'gdpr-user'});
+      await engine
+          .write('tasks', 't2', {'title': 'Task 2', 'user_id': 'gdpr-user'});
+      await engine
+          .write('notes', 'n1', {'body': 'Note 1', 'user_id': 'gdpr-user'});
       await engine.write('profiles', 'p1', {
         'name': 'GDPR User',
         'email': 'user@example.com',
@@ -5456,7 +5565,8 @@ void main() {
         // jsonEncode should not throw
         final json = jsonEncode(serializable);
         expect(json, isNotEmpty,
-            reason: 'Queue entries must be JSON-serializable for data portability');
+            reason:
+                'Queue entries must be JSON-serializable for data portability');
       }
 
       engine.dispose();
@@ -5477,7 +5587,12 @@ void main() {
         timestamps: InMemoryTimestampStore(),
         tables: ['patients'],
         config: const SyncConfig(
-          sensitiveFields: ['ssn', 'date_of_birth', 'genetic_data', 'biometric'],
+          sensitiveFields: [
+            'ssn',
+            'date_of_birth',
+            'genetic_data',
+            'biometric'
+          ],
         ),
       );
 
@@ -5685,7 +5800,8 @@ void main() {
       // All events have UTC timestamps for audit trail
       for (final event in events) {
         expect(event.timestamp.isUtc, isTrue,
-            reason: 'All sync events must have UTC timestamps for audit compliance');
+            reason:
+                'All sync events must have UTC timestamps for audit compliance');
       }
 
       // SyncPullComplete includes table and rowCount for detailed logging
@@ -5693,7 +5809,8 @@ void main() {
       expect(pullEvents, isNotEmpty);
       expect(pullEvents.first.table, 'tasks');
       expect(pullEvents.first.rowCount, greaterThanOrEqualTo(0),
-          reason: 'Pull event must include row count for transfer volume logging');
+          reason:
+              'Pull event must include row count for transfer volume logging');
 
       // Events can be serialized for compliance log shipping
       for (final event in events) {
@@ -5719,5 +5836,4 @@ void main() {
       engine.dispose();
     });
   });
-
 }
