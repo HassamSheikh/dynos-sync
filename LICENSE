@@ -1,24 +1,21 @@
-Business Source License 1.1
+MIT License
 
-Parameters:
+Copyright (c) 2024-2026 Hassam Sheikh (dynos.fit)
 
-  Licensed Work:    dynos_sync Synchronization Engine (and all related source files)
-  Change Date:      2028-03-21
-  Change License:   Apache License, Version 2.0
-  Additional Use Grant: 
-    1. Non-Production Use: You may use the Licensed Work for development, testing, and educational purposes at no cost.
-    2. Small-Scale Production: You may use the Licensed Work in production environments if your entity (including affiliates) has less than $5,000,000 USD in total annual revenue or total venture funding.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
----
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Terms of the Business Source License 1.1:
-
-The Licensor hereby grants you the right to copy, modify, create derivative works from, and redistribute the Licensed Work, but only to the extent permitted by the Additional Use Grant.
-
-Effective on the Change Date, or the fourth anniversary of the first public release of a specific version of the Licensed Work under this License, whichever is earlier, its usage shall be governed by the Change License (Apache License 2.0).
-
-Any use of the Licensed Work that is not permitted by this License (including the Additional Use Grant) is a breach of this License and is subject to the Licensor's rights.
-
-For a Commercial Production License (for entities exceeding the revenue threshold), please contact the maintainer at the official repository.
-
-Copyright (c) 2024-2026 Hassam Sheikh (dynos_sync). All rights reserved.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

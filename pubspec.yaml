@@ -1,7 +1,14 @@
 name: dynos_sync
-description: A local-first, offline-capable sync engine. Backend and database agnostic.
-version: 0.1.0
-repository: https://github.com/HassamSheikh/dynos_sync
+description: 🛡️ Production-hardened, high-performance sync engine for Dart & Flutter. Built for 50k+ writes/sec, delta-pulls, and zero-jank offline-first reliability.
+version: 0.1.2
+repository: https://github.com/HassamSheikh/dynos-sync
+homepage: https://dynos.fit
+topics:
+  - sync
+  - offline-first
+  - database
+  - supabase
+  - high-performance
 
 environment:
   sdk: ^3.0.0

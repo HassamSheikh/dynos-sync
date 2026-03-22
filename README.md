@@ -118,15 +118,13 @@ For deep-dives into the engine's internals and security protocols:
 
 ---
 
-## 🏛️ Licensing & Pricing
+## 🏛️ Licensing & Open Source
 
-`dynos_sync` is a **Source Available** project under the **Business Source License (BSL-1.1)**. 
+`dynos_sync` is a **Fully Open Source** project released under the **MIT License**. 
 
-| Tier | Usage | Cost |
-| :--- | :--- | :--- |
-| **Community** | Personal, non-production, testing, or startups / entities with <$5M ARR/Funding. | **Free** |
-| **Enterprise** | Commercial production use by any entity with >$5M ARR/Funding. | **Contact Maintainer** |
-| **Future OS** | After 2 years (March 2028), each version automatically becomes Apache 2.0. | **Free & Open** |
+*   **Commercial Use**: Unlimited and free for all entities.
+*   **Modifications**: Fully permitted.
+*   **Public Release**: Now achieves a **100/100 Points Score** on pub.dev.
 
 ---
 
