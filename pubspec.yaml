@@ -1,6 +1,6 @@
 name: dynos_sync
 description: 🛡️ Production-hardened, high-performance sync engine for Dart & Flutter. Built for 50k+ writes/sec, delta-pulls, and zero-jank offline-first reliability.
-version: 0.1.3
+version: 0.1.4
 repository: https://github.com/HassamSheikh/dynos-sync
 homepage: https://dynos.fit
 topics:

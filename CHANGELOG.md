@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.1.4 (2026-03-22)
+*   **100% dartdoc coverage**: Added documentation comments to all 225 public API elements.
+
 ## 0.1.3 (2026-03-22)
 *   **Runtime table management**: `addTable()` and `removeTable()` allow registering/unregistering sync tables after engine creation.
 *   **130-test security audit**: Comprehensive audit across 12 categories (HIPAA, GDPR, OWASP Mobile Top 10, injection, flood testing, chaos engineering, conflict resolution, race conditions, denial of service).
