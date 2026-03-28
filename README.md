@@ -56,7 +56,7 @@ Flutter App  -->  SyncEngine  -->  Local DB (Drift/SQLite)
 
 ```yaml
 dependencies:
-  dynos_sync: ^0.1.5
+  dynos_sync: ^0.1.6
 ```
 
 ---
@@ -116,7 +116,23 @@ await sync.push('workouts', id, {
 }, operation: SyncOperation.patch);
 ```
 
-### 6. Logout
+### 6. Background isolate
+
+```dart
+// Dart isolates can't share live DB objects, so pass a factory instead.
+final isolateEngine = IsolateSyncEngine(
+  engineFactory: () => SyncEngine(
+    local: DriftLocalStore(AppDatabase()),
+    remote: SupabaseRemoteStore(client: client, userId: () => uid),
+    queue: DriftQueueStore(AppDatabase()),
+    timestamps: DriftTimestampStore(AppDatabase()),
+    tables: ['tasks', 'notes'],
+  ),
+);
+await isolateEngine.syncAllInBackground();
+```
+
+### 7. Logout
 
 ```dart
 await sync.logout();  // wipes queue, local data, timestamps
@@ -186,6 +202,20 @@ await sync.logout();  // wipes queue, local data, timestamps
 | `RlsViolationException` | Pulled row has wrong `user_id` |
 | `SyncRemoteException` | Remote returns an error response |
 | `SyncDeserializationException` | Failed to parse remote response |
+
+### IsolateSyncEngine
+
+Runs sync in a background isolate to keep the UI thread free.
+
+```dart
+IsolateSyncEngine({required SyncEngine Function() engineFactory})
+```
+
+| Method | Description |
+|---|---|
+| `syncAllInBackground()` | Constructs a fresh engine via `engineFactory` inside a background isolate and runs `syncAll()` |
+
+> **Note:** Dart isolates cannot share live database connections. The `engineFactory` is called inside the isolate, so pass a function that creates new store instances (e.g. `DriftLocalStore(AppDatabase())`), not pre-existing ones.
 
 ### Store interfaces
 
