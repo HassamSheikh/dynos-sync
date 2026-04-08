@@ -6150,7 +6150,8 @@ void main() {
 
       remote.onPush = (_, __, ___, ____) async =>
           throw const AuthExpiredException('Token expired');
-      remote.onPushBatch = (_) async => throw Exception('Batch fail');
+      remote.onPushBatch = (_) async =>
+          throw const AuthExpiredException('Token expired');
 
       await queue.enqueue(SyncEntry(
         id: 'auth-patch',
