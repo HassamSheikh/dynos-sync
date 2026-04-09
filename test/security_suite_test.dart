@@ -1086,9 +1086,12 @@ void main() {
 
       final conflicts = events.whereType<SyncConflict>().toList();
       expect(conflicts, isNotEmpty);
-      // Delete should win — strategy should be clientWins
+      // SyncEngine._resolveConflict has a special case: when the local
+      // pending entry is a DELETE, it always resolves as clientWins
+      // regardless of the configured conflictStrategy (lastWriteWins here).
       expect(conflicts.first.strategyUsed, ConflictStrategy.clientWins,
-          reason: 'DELETE operation wins over remote update');
+          reason:
+              'DELETE override: local delete always wins over remote update');
     });
 
     test(
