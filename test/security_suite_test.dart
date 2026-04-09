@@ -1312,9 +1312,25 @@ void main() {
         await engine.write('tasks', 'task-$i', {'val': i});
       }
 
-      // Should not throw — engine is stable
       expect(queue.allEntries.length, 100,
           reason: 'All 100 entries must be in the queue (no data loss)');
+
+      // Drain to trigger the onPush handler with alternating failures
+      await engine.drain();
+
+      // Verify the engine actually processed entries under alternating failures
+      expect(callIdx, greaterThan(0),
+          reason: 'drain() must have invoked the push handler');
+      final syncedCount =
+          queue.allEntries.where((e) => e.syncedAt != null).length;
+      final pendingCount =
+          queue.allEntries.where((e) => e.isPending).length;
+      expect(syncedCount + pendingCount, 100,
+          reason: 'No entries lost after drain with alternating failures');
+      expect(syncedCount, greaterThan(0),
+          reason: 'Some entries should have synced on even-numbered calls');
+      expect(pendingCount, greaterThan(0),
+          reason: 'Some entries should remain pending from odd-numbered failures');
     });
 
     test('31. Concurrent writes during drain: new records not in current batch',
