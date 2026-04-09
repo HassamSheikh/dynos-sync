@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import '../queue_store.dart';
 import '../sync_entry.dart';
+import '../sync_exceptions.dart';
 import '../sync_operation.dart';
 
 /// [QueueStore] implementation backed by a Drift [DynosSyncQueueTable].
@@ -139,7 +140,7 @@ class DriftQueueStore implements QueueStore {
       table: row.read<String>('table_name'),
       recordId: row.read<String>('record_id'),
       operation: SyncOperation.values.byName(row.read<String>('operation')),
-      payload: jsonDecode(row.read<String>('payload')) as Map<String, dynamic>,
+      payload: _decodePayload(row.read<String>('payload')),
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         row.read<int>('created_at'),
         isUtc: true,
@@ -158,5 +159,13 @@ class DriftQueueStore implements QueueStore {
             )
           : null,
     );
+  }
+
+  static Map<String, dynamic> _decodePayload(String raw) {
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } on FormatException catch (e) {
+      throw SyncDeserializationException(e);
+    }
   }
 }
