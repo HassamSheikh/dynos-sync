@@ -165,33 +165,33 @@ class SyncEngine {
 
   /// Write a record locally and queue it for push to the remote.
   ///
-  /// **Military Grade Fix:** Operation is now explicitly ordered to ensure
-  /// the sync queue entry exists before the local write completes.
+  /// Local write happens first so that a queue entry is never orphaned
+  /// without a corresponding local record.
   Future<void> write(
     String table,
     String id,
     Map<String, dynamic> data,
   ) async {
-    // 🛡️ Scrub PII before anything else
     final maskedData = _maskPayload(data);
-
-    // Validate payload size after scrubbing (just in case)
     _validatePayloadSize(maskedData);
 
-    // 1. Queue it (includes RLS check)
-    await _enqueue(table, id, SyncOperation.upsert, maskedData);
-
-    // 2. Write it locally
+    // 1. Write locally first — if this fails, nothing is queued
     await local.upsert(table, id, maskedData);
+
+    // 2. Queue for remote sync
+    await _enqueue(table, id, SyncOperation.upsert, maskedData);
   }
 
   /// Delete a record locally and queue the deletion for push.
+  ///
+  /// Local delete happens first so that a queue entry is never orphaned
+  /// without the corresponding local record already being removed.
   Future<void> remove(String table, String id) async {
-    // 1. Queue deletion
-    await _enqueue(table, id, SyncOperation.delete, {});
-
-    // 2. Remove locally
+    // 1. Remove locally first — if this fails, nothing is queued
     await local.delete(table, id);
+
+    // 2. Queue deletion for remote sync
+    await _enqueue(table, id, SyncOperation.delete, {});
   }
 
   /// Queue a push without writing locally.
@@ -204,10 +204,10 @@ class SyncEngine {
     Map<String, dynamic> data, {
     SyncOperation operation = SyncOperation.upsert,
   }) async {
-    // Validate payload size before anything
-    _validatePayloadSize(data);
+    final maskedData = _maskPayload(data);
+    _validatePayloadSize(maskedData);
 
-    await _enqueue(table, id, operation, data);
+    await _enqueue(table, id, operation, maskedData);
   }
 
   // ── Drain (push pending) ──────────────────────────────────────────────────
