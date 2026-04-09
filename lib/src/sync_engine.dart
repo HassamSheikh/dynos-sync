@@ -68,8 +68,13 @@ class SyncEngine {
     if (_tables.contains(table)) return false;
     _tables.add(table);
     if (pull) {
-      final since = await timestamps.get(table);
-      await _pullTable(table, since);
+      try {
+        final since = await timestamps.get(table);
+        await _pullTable(table, since);
+      } catch (_) {
+        _tables.remove(table);
+        rethrow;
+      }
     }
     return true;
   }
