@@ -165,8 +165,9 @@ class SyncEngine {
 
   /// Write a record locally and queue it for push to the remote.
   ///
-  /// **Military Grade Fix:** Operation is now explicitly ordered to ensure
-  /// the sync queue entry exists before the local write completes.
+  /// Local write runs first so a failed upsert never leaves an orphaned
+  /// queue entry.  If `local.upsert` throws, no entry is enqueued and the
+  /// caller receives the error.
   Future<void> write(
     String table,
     String id,
@@ -178,20 +179,23 @@ class SyncEngine {
     // Validate payload size after scrubbing (just in case)
     _validatePayloadSize(maskedData);
 
-    // 1. Queue it (includes RLS check)
-    await _enqueue(table, id, SyncOperation.upsert, maskedData);
-
-    // 2. Write it locally
+    // 1. Write locally first — fail fast before touching the queue
     await local.upsert(table, id, maskedData);
+
+    // 2. Queue it for remote push (includes RLS check)
+    await _enqueue(table, id, SyncOperation.upsert, maskedData);
   }
 
   /// Delete a record locally and queue the deletion for push.
+  ///
+  /// Local delete runs first so a failed delete never leaves an orphaned
+  /// queue entry.
   Future<void> remove(String table, String id) async {
-    // 1. Queue deletion
-    await _enqueue(table, id, SyncOperation.delete, {});
-
-    // 2. Remove locally
+    // 1. Remove locally first — fail fast before touching the queue
     await local.delete(table, id);
+
+    // 2. Queue deletion for remote push
+    await _enqueue(table, id, SyncOperation.delete, {});
   }
 
   /// Queue a push without writing locally.
