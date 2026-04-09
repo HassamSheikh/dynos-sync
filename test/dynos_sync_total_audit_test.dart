@@ -973,6 +973,16 @@ void main() {
       expect(allErrorText, isNot(contains('INS-SECRET-12345')),
           reason: 'Insurance ID must not appear in verbose error output');
 
+      // Stack traces must also not leak sensitive data
+      final allStackTraceText =
+          allStackTraces.map((st) => st.toString()).join('\n');
+      expect(allStackTraceText, isNot(contains('Bipolar Disorder')),
+          reason: 'Diagnosis must not appear in stack trace output');
+      expect(allStackTraceText, isNot(contains('Lithium 300mg')),
+          reason: 'Medications must not appear in stack trace output');
+      expect(allStackTraceText, isNot(contains('INS-SECRET-12345')),
+          reason: 'Insurance ID must not appear in stack trace output');
+
       engine.dispose();
     });
 
@@ -2105,6 +2115,8 @@ void main() {
       expect(conflicts2.last.resolvedVersion['title'], 'Local V2',
           reason: 'Local T=18:00 > Remote T=14:00, local wins');
       expect(local.getData('tasks', 'rec-2')?['title'], 'Local V2');
+
+      engine.dispose();
     });
 
     test(
@@ -2211,12 +2223,15 @@ void main() {
       expect(resolved['bio'], 'Remote bio',
           reason: 'Server wins: bio must be Remote bio');
 
-      // Verify in local store
+      // Verify resolved values were persisted to local store
       final localData = local.getData('profiles', 'p1');
       expect(localData, isNotNull);
-      expect(localData!['name'], isNotNull);
-      expect(localData['name'], isNotEmpty);
-      expect(localData['age'], isNotNull);
+      expect(localData!['name'], 'Bob',
+          reason: 'Server wins: local store name must be Bob');
+      expect(localData['age'], 25,
+          reason: 'Server wins: local store age must be 25');
+      expect(localData['bio'], 'Remote bio',
+          reason: 'Server wins: local store bio must be Remote bio');
     });
 
     test(
