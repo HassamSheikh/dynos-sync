@@ -549,7 +549,7 @@ void main() {
       engine.events.listen(events.add);
 
       await engine.write('patients', 'p1', {'name': 'Test'});
-      await Future<void>.delayed(Duration.zero);
+      await engine.drain();
 
       final authEvents = events.whereType<SyncAuthRequired>().toList();
       expect(authEvents, isNotEmpty,
