@@ -6010,7 +6010,7 @@ void main() {
         config: const SyncConfig(maxPayloadBytes: 100),
       );
 
-      expect(
+      await expectLater(
         () => engine.push(
           'tasks',
           't-1',
@@ -6036,7 +6036,7 @@ void main() {
         userId: 'user-A',
       );
 
-      expect(
+      await expectLater(
         () => engine.push(
           'tasks',
           't-1',
