@@ -122,7 +122,7 @@ class SyncEngine {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Map<String, dynamic> _maskPayload(Map<String, dynamic> data) {
-    if (config.sensitiveFields.isEmpty) return data;
+    if (config.sensitiveFields.isEmpty) return Map<String, dynamic>.from(data);
     final masked = Map<String, dynamic>.from(data);
     for (final field in config.sensitiveFields) {
       if (masked.containsKey(field)) {
@@ -204,10 +204,12 @@ class SyncEngine {
     Map<String, dynamic> data, {
     SyncOperation operation = SyncOperation.upsert,
   }) async {
-    // Validate payload size before anything
-    _validatePayloadSize(data);
+    final maskedData = _maskPayload(data);
 
-    await _enqueue(table, id, operation, data);
+    // Validate payload size before anything
+    _validatePayloadSize(maskedData);
+
+    await _enqueue(table, id, operation, maskedData);
   }
 
   // ── Drain (push pending) ──────────────────────────────────────────────────
@@ -428,7 +430,7 @@ class SyncEngine {
     Map<String, dynamic> remoteRow,
   ) async {
     final localEntries = await queue.getPendingEntries(table, id);
-    final localEntry = localEntries.isNotEmpty ? localEntries.first : null;
+    final localEntry = localEntries.isNotEmpty ? localEntries.last : null;
 
     // If local entry is a DELETE operation: delete wins (skip remote update)
     if (localEntry != null && localEntry.operation == SyncOperation.delete) {
@@ -447,6 +449,7 @@ class SyncEngine {
     final localPayload = localEntry?.payload ?? <String, dynamic>{};
     Map<String, dynamic> resolved;
     ConflictStrategy strategyUsed = config.conflictStrategy;
+    bool serverWon = false;
 
     switch (config.conflictStrategy) {
       case ConflictStrategy.lastWriteWins:
@@ -458,16 +461,19 @@ class SyncEngine {
             resolved = localPayload;
           } else {
             resolved = remoteRow;
+            serverWon = true;
           }
         } else {
           // No timestamps available — server wins as safe default
           resolved = remoteRow;
+          serverWon = true;
           strategyUsed = ConflictStrategy.serverWins;
         }
         break;
 
       case ConflictStrategy.serverWins:
         resolved = remoteRow;
+        serverWon = true;
         break;
 
       case ConflictStrategy.clientWins:
@@ -476,6 +482,7 @@ class SyncEngine {
 
       case ConflictStrategy.custom:
         resolved = await config.onConflict!(table, id, localPayload, remoteRow);
+        serverWon = identical(resolved, remoteRow);
         break;
     }
 
@@ -493,7 +500,6 @@ class SyncEngine {
     await local.upsert(table, id, resolved);
 
     // If server won, delete local queue entries for this record
-    final serverWon = identical(resolved, remoteRow);
     if (serverWon) {
       for (final entry in localEntries) {
         await queue.deleteEntry(entry.id);
