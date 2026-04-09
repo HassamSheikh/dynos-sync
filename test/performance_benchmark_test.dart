@@ -59,12 +59,14 @@ class FastInMemoryQueue implements QueueStore {
 }
 
 class FastInMemoryLocal implements LocalStore {
+  final _data = <String, Map<String, dynamic>>{};
   @override
-  Future<void> clearAll(List<String> t) async {}
+  Future<void> clearAll(List<String> t) async => _data.clear();
   @override
-  Future<void> upsert(String n, String i, Map<String, dynamic> d) async {}
+  Future<void> upsert(String n, String i, Map<String, dynamic> d) async =>
+      _data['$n:$i'] = d;
   @override
-  Future<void> delete(String n, String i) async {}
+  Future<void> delete(String n, String i) async => _data.remove('$n:$i');
 }
 
 void main() {
