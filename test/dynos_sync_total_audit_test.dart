@@ -3152,7 +3152,7 @@ void main() {
         final prevEntry = retryEvents[i - 1].entry;
         final currEntry = retryEvents[i].entry;
         // Each successive entry should have a higher retryCount
-        expect(currEntry.retryCount, greaterThanOrEqualTo(prevEntry.retryCount),
+        expect(currEntry.retryCount, greaterThan(prevEntry.retryCount),
             reason: 'Retry count must increase with each failure');
       }
 
@@ -3163,6 +3163,9 @@ void main() {
         await clearBackoff();
         await engine.drain();
       }
+
+      expect(retryEvents.length, 10,
+          reason: 'Should have 10 SyncRetryScheduled events after both loops');
 
       // At retryCount=9, delay = 2^10 = 1024s, but capped at 60s
       final lastRetry = retryEvents.last;
@@ -6150,7 +6153,8 @@ void main() {
 
       remote.onPush = (_, __, ___, ____) async =>
           throw const AuthExpiredException('Token expired');
-      remote.onPushBatch = (_) async => throw Exception('Batch fail');
+      remote.onPushBatch = (_) async =>
+          throw const AuthExpiredException('Token expired');
 
       await queue.enqueue(SyncEntry(
         id: 'auth-patch',
