@@ -204,10 +204,13 @@ class SyncEngine {
     Map<String, dynamic> data, {
     SyncOperation operation = SyncOperation.upsert,
   }) async {
-    // Validate payload size before anything
-    _validatePayloadSize(data);
+    // Scrub PII before anything else (matches write() behavior)
+    final maskedData = _maskPayload(data);
 
-    await _enqueue(table, id, operation, data);
+    // Validate payload size after scrubbing
+    _validatePayloadSize(maskedData);
+
+    await _enqueue(table, id, operation, maskedData);
   }
 
   // ── Drain (push pending) ──────────────────────────────────────────────────
