@@ -3637,7 +3637,7 @@ void main() {
     });
 
     test(
-        '85. Read during write consistency — write() is atomic (enqueue then upsert)',
+        '85. Read during write consistency — write() is atomic (upsert then enqueue)',
         () async {
       // SEVERITY: HIGH
       // COMPLIANCE: Data Integrity — write ordering guarantee
@@ -4143,7 +4143,7 @@ void main() {
     });
 
     test(
-        '97. Device storage full — ThrowingLocalStore surfaces error, queue entry preserved',
+        '97. Device storage full — ThrowingLocalStore surfaces error, no orphan queue entry',
         () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: NIST
@@ -4159,9 +4159,9 @@ void main() {
         tables: ['tasks'],
       );
 
-      // write() calls _enqueue first (which enqueues + best-effort push),
-      // THEN calls local.upsert which throws. The queue entry is created
-      // before the local write attempt.
+      // write() now calls local.upsert FIRST. When it throws, _enqueue is
+      // never reached, so no queue entry is created — preserving the
+      // invariant that every queued operation corresponds to local data.
       Object? caughtError;
       try {
         await engine.write('tasks', 't1', {'title': 'Full disk test'});
@@ -4174,12 +4174,12 @@ void main() {
       expect(caughtError.toString(), contains('Disk full'),
           reason: 'Error should be the ThrowingLocalStore error');
 
-      // Queue entry should exist (enqueued before local write attempt).
-      // The entry may be synced (best-effort push succeeded) or pending.
-      // The key assertion: the entry IS in the queue regardless of local write failure.
-      expect(queue.allEntries, isNotEmpty,
+      // Queue must be empty: the write never made it past local.upsert, so
+      // no push operation should be queued that would have no corresponding
+      // local row.
+      expect(queue.allEntries, isEmpty,
           reason:
-              'Queue entry must be preserved when local write fails (atomic ordering)');
+              'Queue entry must NOT exist when local write fails (data integrity invariant)');
 
       engine.dispose();
     });
@@ -4532,7 +4532,7 @@ void main() {
     });
 
     test(
-        '105. Power loss during write — entry queued before local upsert (atomic ordering)',
+        '105. Power loss during write — local write precedes enqueue (no orphan queue entries)',
         () async {
       // SEVERITY: CRITICAL
       // COMPLIANCE: SOC2, NIST
@@ -4541,10 +4541,9 @@ void main() {
       // Track operation ordering
       final trackingLocal = InMemoryLocalStore();
 
-      // We verify by checking that queue has the entry even when local write
-      // hasn't happened yet. The engine calls _enqueue BEFORE local.upsert.
-      // To prove this, we use a local store that records when it's called
-      // and check queue state at that point.
+      // The engine now calls local.upsert BEFORE _enqueue. Successful writes
+      // produce both a local row and a queue entry; writes that fail during
+      // local.upsert produce neither.
 
       final remote = ConfigurableRemoteStore();
       // Make remote push fail silently so it doesn't mark as synced
@@ -4561,16 +4560,17 @@ void main() {
 
       await engine.write('tasks', 't1', {'title': 'Power loss test'});
 
-      // After write completes, verify that queue has the entry
+      // After a successful write, verify that queue has the entry
       final entries = queue.allEntries.where((e) => e.recordId == 't1');
       expect(entries, isNotEmpty,
-          reason: 'Queue entry must exist (was created before local upsert)');
+          reason: 'Queue entry must exist after a successful write');
 
       // Verify local also has the data (write completed fully)
       expect(trackingLocal.getData('tasks', 't1'), isNotNull,
           reason: 'Local store should have the data after full write');
 
-      // Now simulate power loss during write: ThrowingLocalStore fails after enqueue
+      // Now simulate power loss during write: ThrowingLocalStore fails on
+      // local.upsert, so we must never reach _enqueue.
       final failLocal = ThrowingLocalStore();
       final failEngine = SyncEngine(
         local: failLocal,
@@ -4587,12 +4587,13 @@ void main() {
         // Expected: ThrowingLocalStore fails
       }
 
-      // Queue should have the entry despite local write failure
+      // No queue entry should have been created for the failed write — the
+      // data integrity invariant is that queued ops correspond to local data.
       final powerLossEntries =
           queue.allEntries.where((e) => e.recordId == 'power-loss');
-      expect(powerLossEntries, isNotEmpty,
+      expect(powerLossEntries, isEmpty,
           reason:
-              'Queue entry must survive local write failure (enqueue-first ordering)');
+              'Queue must not contain an entry for a write whose local.upsert threw');
 
       engine.dispose();
       failEngine.dispose();

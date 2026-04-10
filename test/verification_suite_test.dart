@@ -75,7 +75,8 @@ void main() {
   });
 
   group('Persistence Suite (Atomic Order)', () {
-    test('write() enqueues before attempting local upsert', () async {
+    test('write() writes locally before enqueueing — no orphan queue entry on local failure',
+        () async {
       final queue = TrackingQueueStore();
       final local = FailingLocalStore(); // This fails the upsert
 
@@ -87,14 +88,15 @@ void main() {
         tables: ['tasks'],
       );
 
-      // Attempt write. Local fails, but check if enqueue was called.
+      // Attempt write. Local fails — enqueue must NOT have been called.
       try {
         await engine.write('tasks', '1', {'name': 'test'});
       } catch (_) {}
 
-      // In our atomic reversal logic, we enqueue FIRST.
-      // If local.upsert fails, the entry is already in the queue.
-      expect(queue.enqueueCount, 1);
+      // Data integrity invariant: a queued operation must correspond to
+      // committed local data. Because local.upsert threw, no queue entry
+      // should have been created.
+      expect(queue.enqueueCount, 0);
     });
   });
 }

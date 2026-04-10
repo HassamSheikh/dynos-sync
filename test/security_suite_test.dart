@@ -1641,7 +1641,7 @@ void main() {
     });
 
     test(
-        '39. Disk full: local.upsert throws — error propagates, queue entry already enqueued',
+        '39. Disk full: local.upsert throws — error propagates, no orphan queue entry',
         () async {
       // SEVERITY: HIGH
       final queue = InMemoryQueueStore();
@@ -1657,7 +1657,8 @@ void main() {
         tables: ['tasks'],
       );
 
-      // write() enqueues first, then calls local.upsert which throws
+      // write() calls local.upsert first and rethrows on failure, so
+      // _enqueue is never reached and nothing is queued.
       Object? caughtError;
       try {
         await engine.write('tasks', 't1', {'title': 'Disk full test'});
@@ -1667,11 +1668,12 @@ void main() {
 
       expect(caughtError, isNotNull, reason: 'Disk full error must propagate');
 
-      // The queue entry should exist because _enqueue runs before local.upsert
+      // The queue must be empty: we can't queue a push for data that isn't
+      // in the local store (data integrity invariant).
       final entries = queue.allEntries;
-      expect(entries, isNotEmpty,
+      expect(entries, isEmpty,
           reason:
-              'Queue entry must exist even when local write fails (atomic ordering)');
+              'Queue entry must NOT exist when local write fails (data integrity invariant)');
     });
 
     test('40. UTC timestamps: all SyncEntry.createdAt are UTC', () async {
